@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Match Center - Obsidian Elite</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#0b1326",
+                        "on-tertiary": "#68000a",
+                        "on-primary-fixed-variant": "#004395",
+                        "on-error-container": "#ffdad6",
+                        "outline": "#8c909f",
+                        "secondary-fixed-dim": "#ffb95f",
+                        "secondary-container": "#ee9800",
+                        "surface-tint": "#adc6ff",
+                        "on-surface": "#dae2fd",
+                        "surface-variant": "#2d3449",
+                        "secondary": "#ffb95f",
+                        "tertiary-container": "#ff5451",
+                        "surface-dim": "#0b1326",
+                        "surface-container-highest": "#2d3449",
+                        "on-primary": "#002e6a",
+                        "on-secondary": "#472a00",
+                        "primary-container": "#4d8eff",
+                        "on-tertiary-fixed": "#410004",
+                        "surface-container-lowest": "#060e20",
+                        "surface-container-low": "#131b2e",
+                        "error-container": "#93000a",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-primary-container": "#00285d",
+                        "outline-variant": "#424754",
+                        "inverse-on-surface": "#283044",
+                        "on-surface-variant": "#c2c6d6",
+                        "error": "#ffb4ab",
+                        "on-tertiary-container": "#5c0008",
+                        "tertiary-fixed": "#ffdad7",
+                        "on-tertiary-fixed-variant": "#930013",
+                        "surface-container": "#171f33",
+                        "on-error": "#690005",
+                        "primary": "#adc6ff",
+                        "on-secondary-fixed-variant": "#653e00",
+                        "surface-bright": "#31394d",
+                        "on-primary-fixed": "#001a42",
+                        "secondary-fixed": "#ffddb8",
+                        "on-background": "#dae2fd",
+                        "primary-fixed": "#d8e2ff",
+                        "on-secondary-container": "#5b3800",
+                        "on-secondary-fixed": "#2a1700",
+                        "tertiary": "#ffb3ad",
+                        "inverse-surface": "#dae2fd",
+                        "surface-container-high": "#222a3d",
+                        "background": "#0b1326",
+                        "inverse-primary": "#005ac2"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "base": "8px",
+                        "container-max": "1280px",
+                        "margin-desktop": "40px",
+                        "gutter": "24px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "match-score": ["Inter"],
+                        "data-mono": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "match-score": ["36px", { "lineHeight": "44px", "letterSpacing": "0.05em", "fontWeight": "800" }],
+                        "data-mono": ["14px", { "lineHeight": "20px", "fontWeight": "500" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .pitch-lines {
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen font-body-md text-body-md overflow-x-hidden">
+<!-- SideNavBar (Desktop) -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-white/5 shadow-lg py-6 z-40">
+<div class="px-6 mb-8 flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shadow-[0_0_8px_rgba(173,198,255,0.3)]">
+<span class="material-symbols-outlined text-primary" data-icon="emoji_events">emoji_events</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-headline-lg text-primary text-xl">Obsidian Elite</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">7-a-Side Premier</p>
+</div>
+</div>
+<div class="flex-1 space-y-2 px-2">
+<a class="text-on-surface-variant hover:bg-surface-variant rounded-xl mx-2 px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="trophy">trophy</span>
+<span>Tournament Hub</span>
+</a>
+<a class="bg-primary-container text-on-primary-container rounded-xl mx-2 px-4 py-3 flex items-center gap-3 cursor-pointer transition-transform active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="sports_soccer">sports_soccer</span>
+<span>Match Center</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant rounded-xl mx-2 px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span>Team Profiles</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant rounded-xl mx-2 px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Admin</span>
+</a>
+</div>
+<div class="px-6 mt-auto">
+<button class="w-full bg-primary text-on-primary font-label-caps text-label-caps py-3 rounded-lg hover:bg-primary-fixed transition-colors">Register Team</button>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="md:ml-64 flex-1 flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-surface/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-white/10 shadow-sm md:w-[calc(100%-16rem)]">
+<div class="flex justify-between items-center px-margin-mobile md:px-margin-desktop py-4 max-w-container-max mx-auto">
+<!-- Mobile Brand (Hidden on Desktop, shown via SideNav) -->
+<div class="md:hidden">
+<span class="font-display-lg text-headline-lg-mobile font-extrabold text-primary tracking-tighter">Obsidian Elite</span>
+</div>
+<!-- Desktop Nav Cluster (Hidden on Mobile) -->
+<nav class="hidden md:flex gap-6">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors hover:bg-surface-variant/50 active:scale-95 duration-200 px-3 py-2 rounded-lg" href="#">Tournament Hub</a>
+<a class="text-primary border-b-2 border-primary pb-1 hover:bg-surface-variant/50 transition-all active:scale-95 duration-200 px-3 py-2" href="#">Match Center</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors hover:bg-surface-variant/50 active:scale-95 duration-200 px-3 py-2 rounded-lg" href="#">Team Profiles</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors hover:bg-surface-variant/50 active:scale-95 duration-200 px-3 py-2 rounded-lg" href="#">Admin</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 pt-24 px-margin-mobile md:px-margin-desktop pb-12 max-w-container-max mx-auto w-full">
+<!-- Hero Section (Scoreboard) -->
+<section class="mb-gutter relative rounded-xl overflow-hidden border border-white/10 bg-surface-container shadow-lg">
+<!-- Decorative Glow Background -->
+<div class="absolute inset-0 opacity-20 bg-gradient-to-br from-primary/30 via-transparent to-error/30 blur-3xl z-0"></div>
+<div class="relative z-10 p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+<!-- Home Team -->
+<div class="flex flex-col items-center flex-1">
+<div class="w-24 h-24 rounded-full bg-surface-variant border border-white/10 mb-4 flex items-center justify-center shadow-lg relative">
+<!-- Winner Glow -->
+<div class="absolute inset-0 rounded-full shadow-[0_0_15px_rgba(173,198,255,0.4)] pointer-events-none"></div>
+<img class="w-16 h-16 object-contain" data-alt="A highly detailed crest logo for a sports team named Crimson Kings. The logo features a stylized geometric crown in deep red and metallic silver, set against a dark obsidian background. The design is modern, sharp, and fits a premium, high-stakes athletic brand aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmK6dtYF75adsGlVJ-qSa8xp0hcmMKihMfmi8dW579Zli1CXOB-sz7G2-EOlBB0AeiiIekZLG2HrOnj2_LmC9YgxzX4EaVZOIkq919WbHEevHKTxQv0ZNwPQJGIzOQZMtS7tTksEUHOTEiUwd-MA0h8idmjcZ_s8jzWrLn2OIV-Rs0LN2_VbfB2VJtKL_XJAZ9HTARlFVdUwfdm14dgBZ5X9fyaBJw5ElzjJDuZ4o2jartCm3SSqydQQ"/>
+</div>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-center">Crimson Kings</h2>
+</div>
+<!-- Score Center -->
+<div class="flex flex-col items-center justify-center px-8">
+<div class="bg-surface-bright/50 backdrop-blur-md border border-white/10 rounded-full px-4 py-1 mb-4 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Full Time</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="font-match-score text-match-score text-5xl md:text-7xl text-primary drop-shadow-[0_0_8px_rgba(173,198,255,0.5)]">2</span>
+<span class="font-match-score text-match-score text-3xl text-on-surface-variant">-</span>
+<span class="font-match-score text-match-score text-5xl md:text-7xl">1</span>
+</div>
+</div>
+<!-- Away Team -->
+<div class="flex flex-col items-center flex-1">
+<div class="w-24 h-24 rounded-full bg-surface-variant border border-white/10 mb-4 flex items-center justify-center opacity-70">
+<img class="w-16 h-16 object-contain" data-alt="A highly detailed crest logo for a sports team named Cobalt United. The logo features a minimalist, interlocking 'C' and 'U' design in bright electric blue and stark white, set against a dark background. The aesthetic is sleek, corporate-modern, and implies speed and precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6r7L0aCKd9WkXySPZ_C__sxfrdSYoJiLKadRda9SQYSsA-GrBojWV6GaI5hvOVyVRkloFvTDvs7Tvw9oiy_OUVJJNLxxQJooyBl5iQONr6wXEsC_8CUP4SACbsLT_HG_GMBlTEMLflZZFe8VxJIy-PMvWyAYMuPrUg1JwGkm3FeHRB3UC6W6Mi2aYkUoIuJM2TZmU-I0QfVsG_tMVStarashcFQL89ezrHX4Sp0zl1xviLTeCgQrWCQ"/>
+</div>
+<h2 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-center text-on-surface-variant">Cobalt United</h2>
+</div>
+</div>
+<!-- Meta-Data Strip -->
+<div class="border-t border-white/10 bg-surface-container-highest/50 p-4 flex flex-wrap justify-center gap-6 font-data-mono text-data-mono text-on-surface-variant relative z-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="sports">sports</span> Referee: Marcus Thorne
+                    </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="stadium">stadium</span> Pitch 2
+                    </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="schedule">schedule</span> 18:00
+                    </div>
+</div>
+</section>
+<!-- Bento Grid Layout for Details -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+<!-- Left Column: Match Events Timeline -->
+<div class="lg:col-span-1 bg-surface-container rounded-xl border border-white/10 p-6 flex flex-col max-h-[600px]">
+<h3 class="font-label-caps text-label-caps text-primary mb-6 border-b border-white/10 pb-2">Match Events</h3>
+<div class="flex-1 overflow-y-auto pr-2 relative space-y-6">
+<!-- Timeline Line -->
+<div class="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 -translate-x-1/2"></div>
+<!-- Event (Home) -->
+<div class="flex items-center w-full">
+<div class="w-1/2 pr-4 text-right flex flex-col items-end">
+<span class="font-data-mono text-data-mono text-on-surface">J. Vance</span>
+<span class="text-xs text-on-surface-variant">Assist: K. Lee</span>
+</div>
+<div class="relative z-10 flex items-center justify-center w-8">
+<div class="bg-surface p-1 rounded-full border border-primary text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="sports_soccer">sports_soccer</span>
+</div>
+</div>
+<div class="w-1/2 pl-4 text-left">
+<span class="font-data-mono text-data-mono text-primary">12'</span>
+</div>
+</div>
+<!-- Event (Away) -->
+<div class="flex items-center w-full">
+<div class="w-1/2 pr-4 text-right">
+<span class="font-data-mono text-data-mono text-on-surface-variant">24'</span>
+</div>
+<div class="relative z-10 flex items-center justify-center w-8">
+<div class="bg-surface p-1 rounded-full border border-secondary text-secondary">
+<div class="w-3 h-4 bg-secondary rounded-sm"></div>
+</div>
+</div>
+<div class="w-1/2 pl-4 text-left flex flex-col items-start">
+<span class="font-data-mono text-data-mono text-on-surface">M. Silva</span>
+<span class="text-xs text-on-surface-variant">Foul</span>
+</div>
+</div>
+<!-- Event (Away Goal) -->
+<div class="flex items-center w-full">
+<div class="w-1/2 pr-4 text-right">
+<span class="font-data-mono text-data-mono text-on-surface-variant">41'</span>
+</div>
+<div class="relative z-10 flex items-center justify-center w-8">
+<div class="bg-surface p-1 rounded-full border border-white/30 text-white/70">
+<span class="material-symbols-outlined text-sm" data-icon="sports_soccer">sports_soccer</span>
+</div>
+</div>
+<div class="w-1/2 pl-4 text-left flex flex-col items-start">
+<span class="font-data-mono text-data-mono text-on-surface">T. Barnes</span>
+</div>
+</div>
+<!-- Halftime Marker -->
+<div class="flex justify-center w-full py-2">
+<span class="bg-surface-variant px-3 py-1 rounded-full text-xs font-label-caps text-on-surface-variant border border-white/5 z-10">HT</span>
+</div>
+<!-- Event (Home Goal) -->
+<div class="flex items-center w-full">
+<div class="w-1/2 pr-4 text-right flex flex-col items-end">
+<span class="font-data-mono text-data-mono text-on-surface">D. Rossi</span>
+<span class="text-xs text-on-surface-variant">Penalty</span>
+</div>
+<div class="relative z-10 flex items-center justify-center w-8">
+<div class="bg-surface p-1 rounded-full border border-primary text-primary shadow-[0_0_8px_rgba(173,198,255,0.4)]">
+<span class="material-symbols-outlined text-sm" data-icon="sports_soccer">sports_soccer</span>
+</div>
+</div>
+<div class="w-1/2 pl-4 text-left">
+<span class="font-data-mono text-data-mono text-primary">68'</span>
+</div>
+</div>
+<!-- Event (Home Card) -->
+<div class="flex items-center w-full">
+<div class="w-1/2 pr-4 text-right flex flex-col items-end">
+<span class="font-data-mono text-data-mono text-on-surface">A. Chen</span>
+</div>
+<div class="relative z-10 flex items-center justify-center w-8">
+<div class="bg-surface p-1 rounded-full border border-error text-error">
+<div class="w-3 h-4 bg-error rounded-sm"></div>
+</div>
+</div>
+<div class="w-1/2 pl-4 text-left">
+<span class="font-data-mono text-data-mono text-on-surface-variant">72'</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Tactical Pitch View -->
+<div class="lg:col-span-2 bg-surface-container rounded-xl border border-white/10 p-6 flex flex-col">
+<div class="flex justify-between items-center mb-6 border-b border-white/10 pb-2">
+<h3 class="font-label-caps text-label-caps text-primary">Tactical Lineups (2-3-1)</h3>
+<span class="font-data-mono text-xs text-on-surface-variant bg-surface-variant/50 px-2 py-1 rounded">7v7 Proportions</span>
+</div>
+<!-- Pitch Container -->
+<div class="flex-1 bg-surface-dim rounded-lg border border-white/5 relative overflow-hidden pitch-lines flex justify-between">
+<!-- Center Circle & Line -->
+<div class="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 -translate-x-1/2"></div>
+<div class="absolute left-1/2 top-1/2 w-24 h-24 rounded-full border border-white/10 -translate-x-1/2 -translate-y-1/2"></div>
+<!-- Home Penalty Area -->
+<div class="absolute left-0 top-1/2 h-1/2 w-24 border border-l-0 border-white/10 -translate-y-1/2 rounded-r-lg"></div>
+<!-- Away Penalty Area -->
+<div class="absolute right-0 top-1/2 h-1/2 w-24 border border-r-0 border-white/10 -translate-y-1/2 rounded-l-lg"></div>
+<!-- Home Team Formation (Left) -->
+<div class="w-1/2 relative p-4 h-full">
+<!-- GK -->
+<div class="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold">1</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Ochoa</span>
+</div>
+<!-- DEF -->
+<div class="absolute left-20 top-1/4 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold">4</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Chen</span>
+<div class="absolute -top-1 -right-1 w-2 h-3 bg-error rounded-sm shadow-sm"></div> <!-- Red Card Tag -->
+</div>
+<div class="absolute left-20 top-3/4 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold">5</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Davis</span>
+</div>
+<!-- MID -->
+<div class="absolute left-40 top-1/6 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold">8</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Lee</span>
+</div>
+<div class="absolute left-48 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold text-primary shadow-[0_0_8px_rgba(173,198,255,0.4)]">10</div>
+<span class="text-[10px] mt-1 text-primary font-data-mono">Vance (C)</span>
+</div>
+<div class="absolute left-40 bottom-1/6 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold">7</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Kim</span>
+</div>
+<!-- FWD -->
+<div class="absolute right-12 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-primary flex items-center justify-center text-xs font-data-mono font-bold text-primary shadow-[0_0_8px_rgba(173,198,255,0.4)]">9</div>
+<span class="text-[10px] mt-1 text-primary font-data-mono">Rossi <span class="material-symbols-outlined text-[10px]" data-icon="sports_soccer">sports_soccer</span></span>
+</div>
+</div>
+<!-- Away Team Formation (Right) -->
+<div class="w-1/2 relative p-4 h-full">
+<!-- GK -->
+<div class="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">1</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Lopes</span>
+</div>
+<!-- DEF -->
+<div class="absolute right-20 top-1/4 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">2</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Silva</span>
+<div class="absolute -top-1 -right-1 w-2 h-3 bg-secondary rounded-sm shadow-sm"></div> <!-- Yellow Card Tag -->
+</div>
+<div class="absolute right-20 top-3/4 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">3</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Jones</span>
+</div>
+<!-- MID -->
+<div class="absolute right-40 top-1/6 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">6</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Patel</span>
+</div>
+<div class="absolute right-48 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">8</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Garcia</span>
+</div>
+<div class="absolute right-40 bottom-1/6 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface-variant">11</div>
+<span class="text-[10px] mt-1 text-on-surface-variant font-data-mono">Smith</span>
+</div>
+<!-- FWD -->
+<div class="absolute left-12 top-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-surface-variant border-2 border-outline-variant flex items-center justify-center text-xs font-data-mono font-bold text-on-surface">9</div>
+<span class="text-[10px] mt-1 text-on-surface font-data-mono">Barnes <span class="material-symbols-outlined text-[10px] text-white/50" data-icon="sports_soccer">sports_soccer</span></span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest w-full py-12 border-t border-white/10 mt-auto">
+<div class="max-w-container-max mx-auto px-margin-desktop grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<div class="flex flex-col gap-4">
+<span class="font-headline-lg text-headline-lg text-primary">Obsidian Elite</span>
+<p class="font-body-md text-body-md text-on-surface-variant">© 2024 Obsidian Elite 7s. All rights reserved.</p>
+</div>
+<div class="md:col-span-2 flex justify-end gap-6 font-body-md text-body-md">
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Sponsors</a>
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Rules</a>
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Contact</a>
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Privacy</a>
+</div>
+</div>
+</footer>
+</div>
+</body></html>
