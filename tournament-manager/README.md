@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Obsidian Elite Tournament Manager
 
-## Getting Started
+A robust, full-stack Next.js application designed to manage high-traffic football tournaments. Built for scalability to handle millions of concurrent users with edge caching and Supabase integration.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Public Hub**: View scheduled fixtures and real-time match events.
+- **Admin Dashboard**: Secure, role-based access for entering match fixtures and logging live match events (goals, red cards, corners, substitutions, etc.).
+- **Authentication**: Secure Google and Email/Password sign-in powered by Supabase Auth.
+- **Highly Scalable**: Prepared for edge caching, connection pooling, and CDN delivery to handle massive spikes in traffic.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deployment Guide (Vercel & Supabase)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Since this codebase is hosted entirely on GitHub, deploying it to Vercel is the most seamless and secure approach. **Do not commit actual `.env` files to GitHub.**
 
-## Learn More
+### 1. Set Up the Database (Supabase)
 
-To learn more about Next.js, take a look at the following resources:
+1. Create a new project at [Supabase](https://supabase.com/dashboard).
+2. Go to **Project Settings** (gear icon) -> **API**.
+3. Keep this tab open; you will need the **Project URL** and the **anon public API Key** for Vercel.
+4. Go to the **SQL Editor** (terminal icon on the left).
+5. Open the `supabase/schema.sql` file from this GitHub repository, copy its contents, and paste it into the Supabase SQL Editor.
+6. Click **Run**. This instantly provisions your tables (`teams`, `fixtures`, `match_events`, `user_roles`) and sets up Row Level Security (RLS).
+7. *Optional but recommended:* Set up Supabase Auth rate limiting in **Authentication -> Rate Limits** to protect against sign-in spam.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2. Deploy to Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Log in to [Vercel](https://vercel.com/) and click **Add New... -> Project**.
+2. Import your GitHub repository containing this codebase.
+3. Vercel will automatically detect that this is a Next.js project. Leave the Build and Output Settings as their defaults.
+4. Expand the **Environment Variables** section. Add the following two variables using the credentials from your Supabase API settings:
+   - Name: `NEXT_PUBLIC_SUPABASE_URL` | Value: *(Your Supabase Project URL)*
+   - Name: `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Value: *(Your Supabase anon key)*
+5. Click **Deploy**. Vercel will build the application and securely inject your database keys.
 
-## Deploy on Vercel
+### 3. Creating Your First Admin User
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+By default, anyone who signs up is a standard user. To grant yourself admin access to the dashboard:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Visit your live Vercel site and create an account via the Sign In page.
+2. Go back to your Supabase Dashboard -> **Authentication** -> **Users**. Find your user ID (UUID).
+3. Go to the **Table Editor** -> `user_roles` table.
+4. Insert a new row:
+   - `user_id`: *(Paste your UUID)*
+   - `role`: `admin`
+5. Refresh your live site. You will now see the "Go to Admin Dashboard" button and have write access to create fixtures.
+
+---
+
+## Local Development (Optional)
+
+If you ever decide to pull the code down to your local machine to test changes:
+
+1. Clone the repository.
+2. Run `npm install`.
+3. Copy the `.env.example` file to a new file named `.env.local` and fill in your Supabase credentials. **(Ensure `.env.local` remains ignored by git).**
+4. Run `npm run dev` to start the local server on `http://localhost:3000`.
+
+## Architecture & Security
+
+For detailed information on how this application is architected to handle 3 million concurrent users, please read the [`SECURITY_AND_SCALING.md`](./SECURITY_AND_SCALING.md) file included in this repository.
