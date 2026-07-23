@@ -18,6 +18,9 @@ CREATE TABLE public.teams (
     name VARCHAR(255) NOT NULL,
     short_name VARCHAR(50),
     logo_url TEXT,
+    coach VARCHAR(255),
+    attire_color VARCHAR(100) DEFAULT 'Yet to be decided',
+    roster TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
