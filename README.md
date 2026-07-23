@@ -61,3 +61,26 @@ If you ever decide to pull the code down to your local machine to test changes:
 ## Architecture & Security
 
 For detailed information on how this application is architected to handle 3 million concurrent users, please read the [`SECURITY_AND_SCALING.md`](./SECURITY_AND_SCALING.md) file included in this repository.
+
+### 4. Enable Google Authentication
+
+To allow users to sign in with their Google accounts, you need to link Google Cloud and Supabase.
+
+**Part 1: Give Supabase's link to Google**
+1. Go to your **Supabase Dashboard** > **Authentication** > **URL Configuration**.
+2. Scroll down to **Callback (for OAuth)**. It looks like `https://[YOUR_PROJECT_ID].supabase.co/auth/v1/callback`. **Copy this link.**
+3. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a project.
+4. Navigate to **APIs & Services > Credentials** and click **Create Credentials -> OAuth client ID** (Web application).
+5. Under **Authorized redirect URIs**, click "Add URI" and **paste the link you copied from Supabase**.
+6. Save it to generate your **Client ID** and **Client Secret**.
+
+**Part 2: Give Google's keys to Supabase**
+1. Go back to your **Supabase Dashboard** > **Authentication** > **Providers**.
+2. Click on **Google** and toggle it **ON**.
+3. Paste the **Client ID** and **Client Secret** that Google just generated.
+4. Click Save.
+
+**Part 3: Tell Supabase about your Vercel Website**
+1. In **Supabase**, go back to **Authentication** > **URL Configuration**.
+2. Under **Site URL**, paste your main Vercel website link (e.g., `https://obsidian-elite.vercel.app`).
+3. Under **Redirect URLs**, click "Add URL", paste your Vercel link again, but add `/**` to the end of it (e.g., `https://obsidian-elite.vercel.app/**`).
