@@ -18,3 +18,7 @@ CREATE POLICY "Anyone can view tournament settings" ON public.tournament_setting
 CREATE POLICY "Admins can insert tournament settings" ON public.tournament_settings FOR INSERT WITH CHECK (public.is_admin());
 CREATE POLICY "Admins can update tournament settings" ON public.tournament_settings FOR UPDATE USING (public.is_admin());
 CREATE POLICY "Admins can delete tournament settings" ON public.tournament_settings FOR DELETE USING (public.is_admin());
+
+-- Add columns for live match management
+ALTER TABLE public.fixtures ADD COLUMN IF NOT EXISTS current_minute INT DEFAULT 0;
+ALTER TABLE public.fixtures ADD COLUMN IF NOT EXISTS stats JSONB DEFAULT '{"home": {"passes": 0, "shots": 0, "fouls": 0, "corners": 0}, "away": {"passes": 0, "shots": 0, "fouls": 0, "corners": 0}}'::jsonb;
