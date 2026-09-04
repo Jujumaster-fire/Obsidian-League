@@ -78,7 +78,18 @@ export default function AdminDashboard() {
   // Form States
   const [newFixture, setNewFixture] = useState({ home_team_id: '', away_team_id: '', match_date: '', venue: '' })
   const [newEvent, setNewEvent] = useState({ fixture_id: '', event_type: 'goal', team_id: '', player_name: '', minute: '', details: '' })
-  const [newTeam, setNewTeam] = useState({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '' })
+    const [tournamentSettings, setTournamentSettings] = useState({ format: 'league', table_arrangement: '', rules: '' })
+
+  const handleUpdateTournamentSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    // Ideally this would save to the tournament_settings table
+    const { error } = await supabase.from('tournament_settings').insert([tournamentSettings])
+    if (error) alert(error.message)
+    else {
+      alert('Tournament settings updated!')
+    }
+  }
+  const [newTeam, setNewTeam] = useState({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '' })
 
   const supabase = createClient()
   const router = useRouter()
@@ -105,7 +116,7 @@ export default function AdminDashboard() {
     if (error) alert('Error registering team: ' + error.message)
     else {
       alert('Team registered successfully!')
-      setNewTeam({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '' })
+      setNewTeam({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '' })
       fetchData() // Refresh lists
     }
   }
@@ -188,6 +199,27 @@ export default function AdminDashboard() {
                             <option value="Yellow">Yellow</option>
                             <option value="Custom">Custom / Other</option>
                         </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Assistant Coach</label>
+                            <input type="text" className="w-full border rounded p-2" placeholder="e.g. Sarah Jenkins" value={newTeam.assistant_coach} onChange={e => setNewTeam({...newTeam, assistant_coach: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Tactical Coach</label>
+                            <input type="text" className="w-full border rounded p-2" placeholder="e.g. David Lin" value={newTeam.tactical_coach} onChange={e => setNewTeam({...newTeam, tactical_coach: e.target.value})} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Medical Staff / Personnel</label>
+                            <input type="text" className="w-full border rounded p-2" placeholder="e.g. Dr. Emily Chen" value={newTeam.medical_staff} onChange={e => setNewTeam({...newTeam, medical_staff: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Kit and Water Personnel</label>
+                            <input type="text" className="w-full border rounded p-2" placeholder="e.g. Tom Baker" value={newTeam.kit_personnel} onChange={e => setNewTeam({...newTeam, kit_personnel: e.target.value})} />
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Players (Roster)</label>
@@ -304,6 +336,29 @@ export default function AdminDashboard() {
                 </form>
             </div>
 
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <h2 className="text-lg font-semibold mb-4">Tournament Settings</h2>
+                <form onSubmit={handleUpdateTournamentSettings} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Tournament Format</label>
+                        <select className="w-full border rounded p-2" value={tournamentSettings.format} onChange={e => setTournamentSettings({...tournamentSettings, format: e.target.value})}>
+                            <option value="league">League Format</option>
+                            <option value="knockouts">Knockouts</option>
+                            <option value="group_to_knockout">Group Stage to Knockout</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Arrangement of Teams on Table</label>
+                        <textarea className="w-full border rounded p-2 h-20" placeholder="e.g. Group A: Team 1, Team 2... Group B..." value={tournamentSettings.table_arrangement} onChange={e => setTournamentSettings({...tournamentSettings, table_arrangement: e.target.value})} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Rules and Codes</label>
+                        <textarea className="w-full border rounded p-2 h-32" placeholder="Enter the official tournament rules and code of conduct..." value={tournamentSettings.rules} onChange={e => setTournamentSettings({...tournamentSettings, rules: e.target.value})} />
+                    </div>
+                    <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 w-full md:w-auto">Update Settings</button>
+                </form>
+            </div>
         </div>
       </div>
     </div>
