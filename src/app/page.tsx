@@ -9,8 +9,23 @@ const insights = [
   { title: "Underdogs to Watch", category: "Season Preview", desc: "These teams might not have the biggest budgets, but they are ready to cause upsets.", img: "https://images.unsplash.com/photo-1508344928928-7137b29de216?q=80&w=1200&auto=format&fit=crop" },
 ]
 
-// Note: any is okay here temporarily while structure is mocked out as requested by the user, but replacing any with unknown fixes lint errors.
-const renderMatchList = (matches: unknown[], emptyMessage: string) => {
+// Mock data interfaces
+interface TeamMock {
+  name: string;
+  abbr: string;
+  color: string;
+  score?: number;
+}
+interface MatchMock {
+  id: string;
+  home: TeamMock;
+  away: TeamMock;
+  status: string;
+  time?: string;
+  date?: string;
+}
+
+const renderMatchList = (matches: MatchMock[], emptyMessage: string) => {
   if (matches.length === 0) {
       return (
           <div className="bg-[#1e293b] rounded-xl p-8 text-center border border-white/5 text-gray-400">
@@ -20,17 +35,42 @@ const renderMatchList = (matches: unknown[], emptyMessage: string) => {
   }
   return (
       <div className="space-y-4">
-          {matches.map((match, i) => (
-              <div key={i} className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
-                  {/* Placeholder for real match data rendering */}
-                  Match Details
-              </div>
+          {matches.map((match) => (
+              <Link href={`/match/${match.id}`} key={match.id} className="block">
+                  <div className="bg-[#1e293b] rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between border border-white/5 hover:border-indigo-500/50 transition-colors cursor-pointer group">
+                      <div className="flex items-center justify-between w-full sm:w-auto flex-1 gap-4">
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1">
+                              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${match.home.color} flex items-center justify-center font-bold text-white text-xs sm:text-sm`}>{match.home.abbr}</div>
+                              <span className="font-semibold text-sm sm:text-lg">{match.home.name}</span>
+                          </div>
+
+                          <div className="flex flex-col items-center px-4 sm:px-8 shrink-0">
+                              {match.home.score !== undefined && match.away.score !== undefined ? (
+                                <>
+                                  <div className="text-xl sm:text-2xl font-black tabular-nums tracking-tighter group-hover:text-indigo-400 transition-colors">{match.home.score} - {match.away.score}</div>
+                                  <div className={`text-xs font-medium mt-1 ${match.status === 'LIVE' ? 'text-red-400 animate-pulse' : 'text-gray-400'}`}>{match.time || match.status}</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-sm sm:text-base font-bold text-gray-400 group-hover:text-indigo-400 transition-colors">VS</div>
+                                  <div className="text-xs font-medium mt-1 text-gray-400">{match.date}</div>
+                                </>
+                              )}
+                          </div>
+
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 justify-end">
+                              <span className="font-semibold text-sm sm:text-lg text-right">{match.away.name}</span>
+                              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${match.away.color} flex items-center justify-center font-bold text-white text-xs sm:text-sm`}>{match.away.abbr}</div>
+                          </div>
+                      </div>
+                  </div>
+              </Link>
           ))}
       </div>
   )
 }
 
-const MatchesOfTheDaySection = ({ matches }: { matches: unknown[] }) => (
+const MatchesOfTheDaySection = ({ matches }: { matches: MatchMock[] }) => (
   <section>
       <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
@@ -40,14 +80,14 @@ const MatchesOfTheDaySection = ({ matches }: { matches: unknown[] }) => (
   </section>
 )
 
-const UpcomingFixturesSection = ({ matches }: { matches: unknown[] }) => (
+const UpcomingFixturesSection = ({ matches }: { matches: MatchMock[] }) => (
   <section>
       <h2 className="text-2xl font-bold mb-6">Upcoming Fixtures</h2>
       {renderMatchList(matches, "No upcoming fixtures scheduled.")}
   </section>
 )
 
-const ConcludedMatchesSection = ({ matches }: { matches: unknown[] }) => (
+const ConcludedMatchesSection = ({ matches }: { matches: MatchMock[] }) => (
   <section>
       <h2 className="text-2xl font-bold mb-6">Results</h2>
       {renderMatchList(matches, "No recent results available.")}
@@ -93,10 +133,40 @@ const RegistrationBanner = () => (
 )
 
 export default function Home() {
-  // Empty data as requested
-  const matchesOfTheDay: unknown[] = []
-  const upcomingFixtures: unknown[] = []
-  const concludedMatches: unknown[] = []
+  // Mock data as requested to test links
+  const matchesOfTheDay: MatchMock[] = [
+    {
+      id: 'demo-live-1',
+      home: { name: 'Crimson Kings', abbr: 'CK', color: 'bg-red-500', score: 2 },
+      away: { name: 'Neon Knights', abbr: 'NK', color: 'bg-blue-500', score: 1 },
+      status: 'LIVE',
+      time: "68'"
+    }
+  ]
+  const upcomingFixtures: MatchMock[] = [
+    {
+      id: 'demo-upcoming-1',
+      home: { name: 'Iron Wolves', abbr: 'IW', color: 'bg-gray-600' },
+      away: { name: 'Shadow Strikers', abbr: 'SS', color: 'bg-purple-600' },
+      status: 'UPCOMING',
+      date: 'Tomorrow, 18:00'
+    },
+    {
+      id: 'demo-upcoming-2',
+      home: { name: 'Azure Titans', abbr: 'AT', color: 'bg-cyan-600' },
+      away: { name: 'Golden Eagles', abbr: 'GE', color: 'bg-yellow-600' },
+      status: 'UPCOMING',
+      date: 'Sat, 14:30'
+    }
+  ]
+  const concludedMatches: MatchMock[] = [
+    {
+      id: 'demo-past-1',
+      home: { name: 'Vortex FC', abbr: 'VFC', color: 'bg-indigo-600', score: 0 },
+      away: { name: 'Crimson Kings', abbr: 'CK', color: 'bg-red-500', score: 3 },
+      status: 'FT'
+    }
+  ]
 
   const hasMatches = matchesOfTheDay.length > 0;
 
