@@ -132,41 +132,56 @@ const RegistrationBanner = () => (
   </section>
 )
 
-export default function Home() {
+import { createClient } from '@/utils/supabase/server'
+
+export default async function Home() {
+  const supabase = createClient()
+
+  // Real data fetch logic for today's matches
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const { data: todayMatchesData } = await (await supabase).from('fixtures')
+    .select('*, home_team:home_team_id(*), away_team:away_team_id(*)')
+    .gte('match_date', startOfDay.toISOString())
+    .lte('match_date', endOfDay.toISOString())
+    .order('match_date', { ascending: true })
+
+  const { data: upcomingMatchesData } = await (await supabase).from('fixtures')
+    .select('*, home_team:home_team_id(*), away_team:away_team_id(*)')
+    .gt('match_date', endOfDay.toISOString())
+    .order('match_date', { ascending: true })
+    .limit(5)
+
+  const { data: concludedMatchesData } = await (await supabase).from('fixtures')
+    .select('*, home_team:home_team_id(*), away_team:away_team_id(*)')
+    .in('status', ['full_time', 'cancelled'])
+    .order('match_date', { ascending: false })
+    .limit(5)
+
   // Mock data as requested to test links
-  const matchesOfTheDay: MatchMock[] = [
-    {
-      id: 'demo-live-1',
-      home: { name: 'Crimson Kings', abbr: 'CK', color: 'bg-red-500', score: 2 },
-      away: { name: 'Neon Knights', abbr: 'NK', color: 'bg-blue-500', score: 1 },
-      status: 'LIVE',
-      time: "68'"
-    }
-  ]
-  const upcomingFixtures: MatchMock[] = [
-    {
-      id: 'demo-upcoming-1',
-      home: { name: 'Iron Wolves', abbr: 'IW', color: 'bg-gray-600' },
-      away: { name: 'Shadow Strikers', abbr: 'SS', color: 'bg-purple-600' },
-      status: 'UPCOMING',
-      date: 'Tomorrow, 18:00'
-    },
-    {
-      id: 'demo-upcoming-2',
-      home: { name: 'Azure Titans', abbr: 'AT', color: 'bg-cyan-600' },
-      away: { name: 'Golden Eagles', abbr: 'GE', color: 'bg-yellow-600' },
-      status: 'UPCOMING',
-      date: 'Sat, 14:30'
-    }
-  ]
-  const concludedMatches: MatchMock[] = [
-    {
-      id: 'demo-past-1',
-      home: { name: 'Vortex FC', abbr: 'VFC', color: 'bg-indigo-600', score: 0 },
-      away: { name: 'Crimson Kings', abbr: 'CK', color: 'bg-red-500', score: 3 },
-      status: 'FT'
-    }
-  ]
+  const matchesOfTheDay: MatchMock[] = todayMatchesData?.map(m => ({
+    id: m.id,
+    home: { name: m.home_team?.name || 'Unknown', abbr: m.home_team?.short_name || 'UNK', color: 'bg-red-500', score: m.home_score },
+    away: { name: m.away_team?.name || 'Unknown', abbr: m.away_team?.short_name || 'UNK', color: 'bg-blue-500', score: m.away_score },
+    status: m.status === 'in_progress' ? 'LIVE' : m.status,
+    time: m.current_minute ? m.current_minute + "'" : new Date(m.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  })) || []
+  const upcomingFixtures: MatchMock[] = upcomingMatchesData?.map(m => ({
+    id: m.id,
+    home: { name: m.home_team?.name || 'Unknown', abbr: m.home_team?.short_name || 'UNK', color: 'bg-gray-600' },
+    away: { name: m.away_team?.name || 'Unknown', abbr: m.away_team?.short_name || 'UNK', color: 'bg-purple-600' },
+    status: 'UPCOMING',
+    date: new Date(m.match_date).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  })) || []
+  const concludedMatches: MatchMock[] = concludedMatchesData?.map(m => ({
+    id: m.id,
+    home: { name: m.home_team?.name || 'Unknown', abbr: m.home_team?.short_name || 'UNK', color: 'bg-indigo-600', score: m.home_score },
+    away: { name: m.away_team?.name || 'Unknown', abbr: m.away_team?.short_name || 'UNK', color: 'bg-red-500', score: m.away_score },
+    status: m.status === 'full_time' ? 'FT' : 'CANCELLED'
+  })) || []
 
   const hasMatches = matchesOfTheDay.length > 0;
 

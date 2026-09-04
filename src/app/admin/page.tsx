@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 // Custom Searchable Dropdown Component
@@ -336,6 +337,28 @@ export default function AdminDashboard() {
                 </form>
             </div>
 
+
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-indigo-200 bg-indigo-50/30">
+                <h2 className="text-lg font-semibold mb-4 text-indigo-900">Manage Live Matches & Scouting</h2>
+                {fixtures.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No scheduled fixtures available.</p>
+                ) : (
+                    <ul className="divide-y divide-gray-200">
+                        {fixtures.map(f => (
+                            <li key={f.id} className="py-3 flex items-center justify-between">
+                                <div>
+                                    <div className="font-medium">{f.home_team?.name} vs {f.away_team?.name}</div>
+                                    <div className="text-xs text-gray-500 mt-1">Status: {f.status} &bull; Score: {f.home_score}-{f.away_score} &bull; Date: {new Date(f.match_date).toLocaleDateString()}</div>
+                                </div>
+                                <Link href={`/admin/match/${f.id}`} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded shadow-sm transition-colors">
+                                    Manage Match
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
 
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h2 className="text-lg font-semibold mb-4">Tournament Settings</h2>
