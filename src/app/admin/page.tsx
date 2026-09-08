@@ -90,7 +90,7 @@ export default function AdminDashboard() {
       alert('Tournament settings updated!')
     }
   }
-  const [newTeam, setNewTeam] = useState({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '' })
+  const [newTeam, setNewTeam] = useState({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '', category: 'Male', team_type: 'Football' })
 
   const supabase = createClient()
   const router = useRouter()
@@ -117,7 +117,7 @@ export default function AdminDashboard() {
     if (error) alert('Error registering team: ' + error.message)
     else {
       alert('Team registered successfully!')
-      setNewTeam({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '' })
+      setNewTeam({ name: '', short_name: '', coach: '', attire_color: 'Yet to be decided', roster: '', medical_staff: '', tactical_coach: '', assistant_coach: '', kit_personnel: '', category: 'Male', team_type: 'Football' })
       fetchData() // Refresh lists
     }
   }
@@ -187,6 +187,23 @@ export default function AdminDashboard() {
                     <div>
                         <label className="block text-sm font-medium mb-1">Head Coach</label>
                         <input type="text" className="w-full border rounded p-2" placeholder="e.g. Marcus Vance" value={newTeam.coach} onChange={e => setNewTeam({...newTeam, coach: e.target.value})} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Category</label>
+                            <select className="w-full border rounded p-2" value={newTeam.category} onChange={e => setNewTeam({...newTeam, category: e.target.value})}>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Type</label>
+                            <select className="w-full border rounded p-2" value={newTeam.team_type} onChange={e => setNewTeam({...newTeam, team_type: e.target.value})}>
+                                <option value="Football">Football</option>
+                                <option value="Futsal">Futsal</option>
+                            </select>
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Attire Color</label>

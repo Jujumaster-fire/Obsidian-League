@@ -5,13 +5,21 @@ import { createClient } from '@/utils/supabase/client'
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 
-const NavLinks = () => (
-  <>
-    <Link href="/" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-base md:text-sm font-medium block md:inline-block">Home</Link>
-    <Link href="/team/demo" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-base md:text-sm font-medium block md:inline-block">Teams</Link>
-    <Link href="/competitions" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-base md:text-sm font-medium block md:inline-block">Competitions</Link>
-  </>
-)
+const NavLinks = ({ pathname }: { pathname: string }) => {
+  const getLinkClass = (path: string) => {
+    const baseClass = "px-3 py-2 rounded-md text-base md:text-sm font-medium block md:inline-block transition-colors "
+    const isActive = pathname === path || (path !== '/' && pathname.startsWith(path))
+    return baseClass + (isActive ? "text-white bg-white/10" : "text-gray-300 hover:text-white hover:bg-white/5")
+  }
+
+  return (
+    <>
+      <Link href="/" className={getLinkClass('/')}>Home</Link>
+      <Link href="/teams" className={getLinkClass('/teams')}>Teams</Link>
+      <Link href="/competitions" className={getLinkClass('/competitions')}>Competitions</Link>
+    </>
+  )
+}
 
 export default function Navigation() {
   const [user, setUser] = useState<unknown>(null)
@@ -80,7 +88,7 @@ export default function Navigation() {
 
               <div className="hidden md:block ml-10">
                 <div className="flex items-baseline space-x-4">
-                  <NavLinks />
+                  <NavLinks pathname={pathname} />
                 </div>
               </div>
             </div>
@@ -88,7 +96,7 @@ export default function Navigation() {
               {user ? (
                 <>
                   {isAdmin && (
-                    <Link href="/admin" className="text-indigo-400 hover:text-indigo-300 px-3 py-2 text-sm font-medium hidden sm:block">
+                    <Link href="/admin" className={`text-sm font-medium hidden sm:block ${pathname.startsWith('/admin') ? 'text-white font-bold' : 'text-indigo-400 hover:text-indigo-300'}`}>
                       Dashboard
                     </Link>
                   )}
@@ -117,16 +125,16 @@ export default function Navigation() {
         className={`fixed inset-y-0 left-0 w-64 bg-[#1e293b] z-50 transform transition-transform duration-300 ease-in-out border-r border-white/10 flex flex-col md:hidden pt-20 pb-6 px-4 shadow-2xl ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex flex-col space-y-4">
-          <NavLinks />
+          <NavLinks pathname={pathname} />
           <hr className="border-white/10 my-4" />
           {user ? (
             <>
               {isAdmin && (
-                <Link href="/admin" className="text-indigo-400 hover:text-white px-3 py-2 rounded-md text-base font-medium block">
+                <Link href="/admin" className={`px-3 py-2 rounded-md text-base font-medium block ${pathname.startsWith('/admin') ? 'text-white bg-white/10' : 'text-indigo-400 hover:text-white hover:bg-white/5'}`}>
                   Dashboard
                 </Link>
               )}
-              <button onClick={handleSignOut} className="text-left text-red-400 hover:text-red-300 px-3 py-2 rounded-md text-base font-medium block w-full">
+              <button onClick={handleSignOut} className="text-left text-red-400 hover:text-red-300 px-3 py-2 rounded-md text-base font-medium block w-full hover:bg-white/5">
                 Sign Out
               </button>
             </>
