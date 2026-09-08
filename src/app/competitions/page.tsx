@@ -559,4 +559,5 @@ export default function CompetitionsPage() {
             <CompetitionsContent />
         </Suspense>
     )
+
 }

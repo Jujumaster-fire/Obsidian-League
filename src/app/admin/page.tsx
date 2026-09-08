@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -8,6 +9,7 @@ import { useRouter } from 'next/navigation'
 
 // Custom Searchable Dropdown Component
 function SearchableSelect({ options, value, onChange, placeholder, isFreeText = false }: { options: any[], value: string, onChange: (val: string) => void, placeholder: string, isFreeText?: boolean }) {
+
     const [isOpen, setIsOpen] = useState(false)
     const [search, setSearch] = useState('')
     const wrapperRef = useRef<HTMLDivElement>(null)
@@ -19,6 +21,7 @@ function SearchableSelect({ options, value, onChange, placeholder, isFreeText = 
                 if (isFreeText && search && !options.find(o => o.id === search)) {
                     onChange(search) // Free text mode allows custom values
                 }
+
             }
         }
         document.addEventListener("mousedown", handleClickOutside)
@@ -27,6 +30,7 @@ function SearchableSelect({ options, value, onChange, placeholder, isFreeText = 
 
     const filteredOptions = options.filter(opt => opt.name.toLowerCase().includes(search.toLowerCase()))
     const selectedOption = options.find(opt => opt.id === value) || (isFreeText && value ? {id: value, name: value} : null)
+
 
     return (
         <div ref={wrapperRef} className="relative w-full">
@@ -81,6 +85,7 @@ function SearchableSelect({ options, value, onChange, placeholder, isFreeText = 
                             </li>
                         )}
                     </ul>
+
                 </div>
             )}
         </div>
@@ -105,6 +110,7 @@ export default function AdminDashboard() {
 
   const [tournamentSettings, setTournamentSettings] = useState({ id: '', rules_text: '', rules_pdf_url: '' })
 
+
   const supabase = createClient()
   const router = useRouter()
 
@@ -115,6 +121,7 @@ export default function AdminDashboard() {
       supabase.from('fixtures').select('*, home_team:teams!home_team_id(name), away_team:teams!away_team_id(name)').order('match_date', { ascending: false }),
       supabase.from('players').select('*, team:teams!team_id(name)').order('name'),
       supabase.from('tournament_settings').select('*').limit(1).single()
+
     ])
 
     if (teamsRes.data) setTeams(teamsRes.data)
@@ -268,6 +275,7 @@ export default function AdminDashboard() {
           alert('Tournament settings updated!')
           fetchData()
       }
+
   }
 
   const handleLogout = async () => {
@@ -586,6 +594,7 @@ export default function AdminDashboard() {
                 </form>
             </div>
         )}
+
       </div>
     </div>
   )
