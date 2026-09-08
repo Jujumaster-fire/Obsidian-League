@@ -1,140 +1,156 @@
 import Navigation from '@/components/Navigation'
+import { createClient } from '@/utils/supabase/server'
+import { notFound } from 'next/navigation'
 
-export default function TeamProfile() {
+export default async function TeamCenter({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const supabase = createClient()
+
+  const { data: team, error } = await (await supabase)
+    .from('teams')
+    .select('*')
+    .eq('id', resolvedParams.id)
+    .single()
+
+  if (error || !team) {
+    notFound()
+  }
+
+  // Fetch fixtures where this team is playing
+  const { data: fixtures } = await (await supabase)
+    .from('fixtures')
+    .select('*, home_team:home_team_id(*), away_team:away_team_id(*)')
+    .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+    .order('match_date', { ascending: false })
+
+  const staff = [
+    { role: 'Head Coach', name: team.coach },
+    { role: 'Assistant Coach', name: team.assistant_coach },
+    { role: 'Tactical Coach', name: team.tactical_coach },
+    { role: 'Medical Staff', name: team.medical_staff },
+    { role: 'Kit Personnel', name: team.kit_personnel },
+  ].filter(s => s.name)
+
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
+    <div className="min-h-screen bg-[#0f172a] text-white pb-32">
       <Navigation />
-      <div className="pt-16">
 
-        {/* Team Header Hero */}
-        <div className="relative h-80 bg-[#1e293b] overflow-hidden border-b border-white/10">
-            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556056504-5c7696c4c28d?q=80&w=2000&auto=format&fit=crop')] bg-cover bg-center opacity-30 mix-blend-luminosity"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent"></div>
-
-            <div className="absolute bottom-0 w-full">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex items-end gap-8">
-                    <div className="w-32 h-32 rounded-2xl bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,0.4)] border-2 border-red-500/50 flex-shrink-0">
-                        <span className="text-5xl font-black text-white tracking-tighter">CK</span>
-                    </div>
-                    <div className="mb-2">
-                        <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2">Crimson Kings</h1>
-                        <p className="text-gray-400 font-medium">Est. 2021 &bull; Sector 4, Neon District &bull; Head Coach: Marcus Vance</p>
-                    </div>
-                </div>
+      {/* Team Header */}
+      <div className="pt-16 border-b border-white/10" style={{ backgroundColor: team.attire_color === 'Yet to be decided' ? '#1e293b' : team.attire_color }}>
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 flex flex-col md:flex-row items-center gap-8 bg-black/40 backdrop-blur-sm">
+            <div className="w-32 h-32 md:w-40 md:h-40 bg-white/10 rounded-full flex items-center justify-center border-4 border-white/20 shadow-2xl backdrop-blur-md">
+                <span className="text-4xl md:text-5xl font-black text-white">{team.short_name}</span>
             </div>
-        </div>
+            <div className="text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider bg-white/20 px-3 py-1 rounded-full backdrop-blur-md">{team.category || 'Male'} {team.team_type || 'Football'}</span>
+                </div>
+                <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-white drop-shadow-lg">{team.name}</h1>
+                <p className="text-white/70 mt-2 font-medium">Attire: {team.attire_color}</p>
+            </div>
+         </div>
+      </div>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                {/* Left Column: Stats & Info */}
-                <div className="space-y-8">
-                    <div className="bg-[#1e293b] rounded-2xl p-6 border border-white/5">
-                        <h3 className="font-bold text-xl mb-6 border-b border-white/10 pb-4">Season Overview</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-[#0f172a] p-4 rounded-xl border border-white/5 text-center">
-                                <div className="text-3xl font-black text-red-400 mb-1">1st</div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">League Pos</div>
-                            </div>
-                            <div className="bg-[#0f172a] p-4 rounded-xl border border-white/5 text-center">
-                                <div className="text-3xl font-black text-white mb-1">28</div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Points</div>
-                            </div>
-                            <div className="bg-[#0f172a] p-4 rounded-xl border border-white/5 text-center">
-                                <div className="text-3xl font-black text-white mb-1">9</div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Wins</div>
-                            </div>
-                            <div className="bg-[#0f172a] p-4 rounded-xl border border-white/5 text-center">
-                                <div className="text-3xl font-black text-green-400 mb-1">+14</div>
-                                <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Goal Diff</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-[#1e293b] rounded-2xl p-6 border border-white/5">
-                        <h3 className="font-bold text-xl mb-6 border-b border-white/10 pb-4">Recent Form</h3>
-                        <div className="flex gap-2 justify-between">
-                            {['W', 'W', 'D', 'W', 'L'].map((result, i) => (
-                                <div key={i} className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm ${
-                                    result === 'W' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                    result === 'D' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' :
-                                    'bg-red-500/20 text-red-400 border border-red-500/30'
-                                }`}>
-                                    {result}
-                                </div>
+            {/* Left Column: Staff & Roster */}
+            <div className="space-y-8">
+                <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
+                    <h3 className="text-xl font-bold mb-4 border-b border-white/10 pb-2">Technical Staff</h3>
+                    {staff.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No staff registered.</p>
+                    ) : (
+                        <ul className="space-y-3">
+                            {staff.map((s, i) => (
+                                <li key={i} className="flex flex-col">
+                                    <span className="text-xs text-indigo-400 uppercase font-bold tracking-wider">{s.role}</span>
+                                    <span className="font-medium">{s.name}</span>
+                                </li>
                             ))}
-                        </div>
-                    </div>
+                        </ul>
+                    )}
                 </div>
 
-                {/* Right Column: Roster */}
-                <div className="lg:col-span-2">
-                    <div className="bg-[#1e293b] rounded-2xl p-6 border border-white/5">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                            <h3 className="font-bold text-xl">Active Roster</h3>
-                            <button className="text-sm text-indigo-400 hover:text-indigo-300 font-medium">Full Squad &rarr;</button>
+                <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
+                    <h3 className="text-xl font-bold mb-4 border-b border-white/10 pb-2">Squad Roster</h3>
+                    {!team.roster ? (
+                        <p className="text-gray-500 text-sm">No players registered.</p>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {team.roster.split(',').map((player: string, i: number) => {
+                                const p = player.trim()
+                                if(!p) return null
+                                return (
+                                    <div key={i} className="bg-white/5 border border-white/10 rounded px-3 py-1 text-sm hover:bg-white/10 transition-colors">
+                                        {p}
+                                    </div>
+                                )
+                            })}
                         </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
-                                        <th className="pb-3 font-semibold">No.</th>
-                                        <th className="pb-3 font-semibold">Player</th>
-                                        <th className="pb-3 font-semibold">Position</th>
-                                        <th className="pb-3 font-semibold text-right">Apps</th>
-                                        <th className="pb-3 font-semibold text-right">Gls</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    <tr className="hover:bg-white/5 transition-colors group cursor-pointer">
-                                        <td className="py-4 text-gray-400 font-mono">01</td>
-                                        <td className="py-4 font-medium text-white flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden"></div>
-                                            David Chen
-                                        </td>
-                                        <td className="py-4 text-gray-400 text-sm">Goalkeeper</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">12</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">0</td>
-                                    </tr>
-                                    <tr className="hover:bg-white/5 transition-colors group cursor-pointer">
-                                        <td className="py-4 text-gray-400 font-mono">04</td>
-                                        <td className="py-4 font-medium text-white flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden"></div>
-                                            Marcus Silva <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30">C</span>
-                                        </td>
-                                        <td className="py-4 text-gray-400 text-sm">Defender</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">11</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">1</td>
-                                    </tr>
-                                    <tr className="hover:bg-white/5 transition-colors group cursor-pointer">
-                                        <td className="py-4 text-gray-400 font-mono">08</td>
-                                        <td className="py-4 font-medium text-white flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden"></div>
-                                            Jaxon Sterling
-                                        </td>
-                                        <td className="py-4 text-gray-400 text-sm">Midfielder</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">12</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">4</td>
-                                    </tr>
-                                    <tr className="hover:bg-white/5 transition-colors group cursor-pointer">
-                                        <td className="py-4 text-gray-400 font-mono">10</td>
-                                        <td className="py-4 font-medium text-white flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden"></div>
-                                            Kaelen Thorne
-                                        </td>
-                                        <td className="py-4 text-gray-400 text-sm">Forward</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">10</td>
-                                        <td className="py-4 text-right tabular-nums text-gray-300">8</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    )}
                 </div>
-
             </div>
-        </main>
+
+            {/* Right Column: Fixtures */}
+            <div className="lg:col-span-2">
+                <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
+                    <h3 className="text-xl font-bold mb-6 border-b border-white/10 pb-2">Recent & Upcoming Fixtures</h3>
+                    {!fixtures || fixtures.length === 0 ? (
+                        <p className="text-gray-500 text-center py-8">No matches scheduled for this team yet.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {fixtures.map(f => {
+                                const isHome = f.home_team_id === team.id
+                                const opponent = isHome ? f.away_team : f.home_team
+
+                                let resultText = ''
+                                let resultColor = 'text-gray-400'
+                                if (f.status === 'full_time') {
+                                    const teamScore = isHome ? f.home_score : f.away_score
+                                    const oppScore = isHome ? f.away_score : f.home_score
+                                    if (teamScore > oppScore) { resultText = 'W'; resultColor = 'text-green-500' }
+                                    else if (teamScore < oppScore) { resultText = 'L'; resultColor = 'text-red-500' }
+                                    else { resultText = 'D'; resultColor = 'text-yellow-500' }
+                                }
+
+                                return (
+                                    <a href={`/match/${f.id}`} key={f.id} className="block group">
+                                        <div className="flex items-center justify-between p-4 bg-black/20 rounded-lg hover:bg-black/40 transition-colors border border-white/5 group-hover:border-indigo-500/30">
+                                            <div className="flex-1 flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
+                                                <span className="text-xs text-gray-500 font-mono w-24">
+                                                    {new Date(f.match_date).toLocaleDateString()}
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium text-gray-400">{isHome ? 'vs' : '@'}</span>
+                                                    <span className="font-bold">{opponent?.name || 'Unknown'}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-4 text-right">
+                                                {f.status === 'full_time' ? (
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`font-black text-lg ${resultColor}`}>{resultText}</span>
+                                                        <span className="font-bold tracking-tighter tabular-nums bg-white/10 px-2 py-1 rounded">
+                                                            {f.home_score} - {f.away_score}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-sm font-bold text-indigo-400">
+                                                        {f.status === 'in_progress' ? 'LIVE' : new Date(f.match_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </a>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+         </div>
       </div>
     </div>
   )

@@ -22,3 +22,7 @@ CREATE POLICY "Admins can delete tournament settings" ON public.tournament_setti
 -- Add columns for live match management
 ALTER TABLE public.fixtures ADD COLUMN IF NOT EXISTS current_minute INT DEFAULT 0;
 ALTER TABLE public.fixtures ADD COLUMN IF NOT EXISTS stats JSONB DEFAULT '{"home": {"passes": 0, "shots": 0, "fouls": 0, "corners": 0}, "away": {"passes": 0, "shots": 0, "fouls": 0, "corners": 0}}'::jsonb;
+
+-- Add category and type columns to teams table
+ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Male' CHECK (category IN ('Male', 'Female'));
+ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS team_type VARCHAR(50) DEFAULT 'Football' CHECK (team_type IN ('Football', 'Futsal'));
