@@ -17,21 +17,24 @@ function CompetitionsContent() {
     const [teams, setTeams] = useState<any[]>([])
     const [events, setEvents] = useState<any[]>([])
     const [players, setPlayers] = useState<any[]>([])
+    const [settings, setSettings] = useState<any>(null)
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
-            const [fixturesRes, teamsRes, eventsRes, playersRes] = await Promise.all([
+            const [fixturesRes, teamsRes, eventsRes, playersRes, settingsRes] = await Promise.all([
                 supabase.from('fixtures').select('*, home_team:home_team_id(*), away_team:away_team_id(*)').order('match_date', { ascending: true }),
                 supabase.from('teams').select('*').order('name'),
                 supabase.from('match_events').select('*, player:player_id(*), assist_player:assist_player_id(*), team:team_id(*)'),
-                supabase.from('players').select('*, team:team_id(*)')
+                supabase.from('players').select('*, team:team_id(*)'),
+                supabase.from('tournament_settings').select('*').limit(1).single()
             ])
 
             if (fixturesRes.data) setFixtures(fixturesRes.data)
             if (teamsRes.data) setTeams(teamsRes.data)
             if (eventsRes.data) setEvents(eventsRes.data)
             if (playersRes.data) setPlayers(playersRes.data)
+            if (settingsRes.data) setSettings(settingsRes.data)
 
             setLoading(false)
         }
@@ -100,6 +103,9 @@ function CompetitionsContent() {
         })
     })
 
+    // Sort group names alphabetically to display A, B, C, D...
+    const sortedGroupNames = Object.keys(groupStats).sort()
+
     // Stats: Top Scorers
     const goalEvents = events.filter(e => e.event_type === 'goal' && e.player_id)
     const scorersMap: Record<string, number> = {}
@@ -136,14 +142,15 @@ function CompetitionsContent() {
     })
     const topCleanSheets = Object.keys(gkCleanSheetsMap).map(id => ({ player: players.find(p => p.id === id), clean_sheets: gkCleanSheetsMap[id] })).sort((a,b) => b.clean_sheets - a.clean_sheets).slice(0, 10)
 
-    // Play-offs Matches
-    const playoffMatches = fixtures.filter(f => f.stage !== 'group_stage')
+    // Play-offs Matches & Unique Stages
+    const playoffMatches = fixtures.filter(f => f.stage && f.stage !== 'group_stage')
+    const playoffStages = Array.from(new Set(playoffMatches.map(f => f.stage)))
 
     const MatchCard = ({ match }: { match: any }) => (
         <div className="bg-[#1e293b] rounded-lg p-4 flex flex-col md:flex-row items-center justify-between border border-white/10 hover:border-indigo-500 transition-colors">
              <div className="text-sm text-gray-400 mb-2 md:mb-0 w-full md:w-32 text-center md:text-left">
                 {new Date(match.match_date).toLocaleDateString()}
-                <div className="text-xs uppercase mt-1">{match.stage.replace('_', ' ')}</div>
+                <div className="text-xs uppercase mt-1">{match.stage.replace(/_/g, ' ')}</div>
              </div>
              <div className="flex items-center justify-center gap-4 flex-1">
                  <div className="text-right flex-1 font-bold text-lg">{match.home_team?.name}</div>
@@ -178,7 +185,7 @@ function CompetitionsContent() {
 
                 {/* Navigation Row */}
                 <div className="flex overflow-x-auto gap-2 border-b border-white/10 pb-1 mb-8 hide-scrollbar">
-                    {['overview', 'results', 'fixtures', 'stats', 'groups', 'playoffs'].map(tab => (
+                    {['overview', 'results', 'fixtures', 'stats', 'groups', 'playoffs', 'rules'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setTab(tab)}
@@ -436,7 +443,7 @@ function CompetitionsContent() {
                         {/* GROUPS TAB */}
                         {currentTab === 'groups' && (
                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                 {['Group A', 'Group B', 'Group C', 'Group D'].map(groupName => (
+                                 {sortedGroupNames.map(groupName => (
                                      <div key={groupName} className="bg-[#1e293b] rounded-xl overflow-hidden border border-white/5 shadow-xl">
                                          <div className="bg-gradient-to-r from-indigo-900 to-slate-800 p-4 border-b border-white/10">
                                              <h2 className="font-bold text-xl">{groupName}</h2>
@@ -473,30 +480,69 @@ function CompetitionsContent() {
                                          </div>
                                      </div>
                                  ))}
+                                 {sortedGroupNames.length === 0 && (
+                                     <div className="col-span-full p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">
+                                         No groups have been formed yet.
+                                     </div>
+                                 )}
                              </div>
                         )}
 
                         {/* PLAY-OFFS TAB */}
                         {currentTab === 'playoffs' && (
                             <div className="space-y-12">
-                                <h2 className="text-2xl font-bold">Tournament Bracket</h2>
+                                <h2 className="text-2xl font-bold">Tournament Bracket / Play-offs</h2>
 
                                 <div className="space-y-10">
-                                    {['final', 'semi_final', 'quarter_final'].map(stage => {
+                                    {playoffStages.map(stage => {
                                         const matches = playoffMatches.filter(f => f.stage === stage)
                                         if (matches.length === 0) return null
                                         return (
                                             <div key={stage}>
-                                                <h3 className="text-xl font-semibold mb-4 text-indigo-300 uppercase tracking-widest">{stage.replace('_', ' ')}</h3>
+                                                <h3 className="text-xl font-semibold mb-4 text-indigo-300 uppercase tracking-widest">{(stage as string).replace(/_/g, ' ')}</h3>
                                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                                     {matches.map(f => <MatchCard key={f.id} match={f} />)}
                                                 </div>
                                             </div>
                                         )
                                     })}
-                                    {playoffMatches.length === 0 && <div className="p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">The play-offs bracket has not been generated yet.</div>}
+                                    {playoffMatches.length === 0 && <div className="p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">No play-off matches have been scheduled yet.</div>}
                                 </div>
                             </div>
+                        )}
+
+                        {/* RULES TAB */}
+                        {currentTab === 'rules' && (
+                             <div className="bg-[#1e293b] rounded-2xl shadow-xl border border-white/10 p-8 md:p-12 max-w-4xl mx-auto">
+                                 <h2 className="text-3xl font-bold mb-8 border-b border-white/10 pb-4">Tournament Rules & Code of Conduct</h2>
+
+                                 {settings?.rules_pdf_url && (
+                                     <div className="mb-10 bg-indigo-900/30 border border-indigo-500/30 p-6 rounded-xl flex items-center justify-between">
+                                         <div>
+                                            <h3 className="font-bold text-lg text-indigo-300 mb-1">Official Rulebook (PDF)</h3>
+                                            <p className="text-sm text-gray-400">Download or view the official tournament rules document.</p>
+                                         </div>
+                                         <a
+                                            href={settings.rules_pdf_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-colors"
+                                         >
+                                             View Rules PDF
+                                         </a>
+                                     </div>
+                                 )}
+
+                                 <div className="prose prose-invert prose-indigo max-w-none">
+                                    {settings?.rules_text ? (
+                                        <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-300">
+                                            {settings.rules_text}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500 italic">No rules have been uploaded yet.</p>
+                                    )}
+                                 </div>
+                             </div>
                         )}
 
                     </div>
