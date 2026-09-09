@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import Link from 'next/link'
+
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 // Custom Searchable Dropdown Component
 function SearchableSelect({ options, value, onChange, placeholder }: { options: any[], value: string, onChange: (val: string) => void, placeholder: string }) {
@@ -78,8 +79,18 @@ export default function AdminDashboard() {
 
   // Form States
   const [newFixture, setNewFixture] = useState({ home_team_id: '', away_team_id: '', match_date: '', venue: '' })
-  const [newEvent, setNewEvent] = useState({ fixture_id: '', event_type: 'goal', team_id: '', player_name: '', minute: '', details: '' })
     const [tournamentSettings, setTournamentSettings] = useState({ format: 'league', table_arrangement: '', rules: '' })
+
+  const fetchData = async () => {
+    setLoading(true)
+    const [teamsRes, fixturesRes] = await Promise.all([
+      supabase.from('teams').select('*').order('name'),
+      supabase.from('fixtures').select('*, home_team:home_team_id(name), away_team:away_team_id(name)').order('match_date', { ascending: false })
+    ])
+    if (teamsRes.data) setTeams(teamsRes.data)
+    if (fixturesRes.data) setFixtures(fixturesRes.data)
+    setLoading(false)
+  }
 
   const handleUpdateTournamentSettings = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,17 +110,6 @@ export default function AdminDashboard() {
     fetchData()
   }, [])
 
-  const fetchData = async () => {
-    setLoading(true)
-    const [teamsRes, fixturesRes] = await Promise.all([
-      supabase.from('teams').select('*').order('name'),
-      supabase.from('fixtures').select('*, home_team:teams!home_team_id(name), away_team:teams!away_team_id(name)')
-    ])
-
-    if (teamsRes.data) setTeams(teamsRes.data)
-    if (fixturesRes.data) setFixtures(fixturesRes.data)
-    setLoading(false)
-  }
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,19 +136,6 @@ export default function AdminDashboard() {
       alert('Fixture created!')
       setNewFixture({ home_team_id: '', away_team_id: '', match_date: '', venue: '' })
       fetchData()
-    }
-  }
-
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const { error } = await supabase.from('match_events').insert([{
-      ...newEvent,
-      minute: parseInt(newEvent.minute)
-    }])
-    if (error) alert('Error creating event: ' + error.message)
-    else {
-      alert('Event logged!')
-      setNewEvent({ ...newEvent, player_name: '', minute: '', details: '' })
     }
   }
 
@@ -301,56 +288,6 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                     <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 w-full md:w-auto">Schedule Fixture</button>
-                </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 className="text-lg font-semibold mb-4">Log Match Event</h2>
-                <form onSubmit={handleCreateEvent} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Fixture</label>
-                        <select required className="w-full border rounded p-2" value={newEvent.fixture_id} onChange={e => setNewEvent({...newEvent, fixture_id: e.target.value})}>
-                            <option value="">Select Scheduled Fixture</option>
-                            {fixtures.map(f => <option key={f.id} value={f.id}>{f.home_team?.name} vs {f.away_team?.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Event Type</label>
-                            <select required className="w-full border rounded p-2" value={newEvent.event_type} onChange={e => setNewEvent({...newEvent, event_type: e.target.value})}>
-                                <option value="goal">Goal</option>
-                                <option value="red_card">Red Card</option>
-                                <option value="yellow_card">Yellow Card</option>
-                                <option value="corner">Corner</option>
-                                <option value="free_kick">Free Kick</option>
-                                <option value="substitution">Substitution</option>
-                                <option value="half_time_whistle">Half Time</option>
-                                <option value="full_time_whistle">Full Time</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Minute</label>
-                            <input type="number" required min="1" max="120" className="w-full border rounded p-2" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} />
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Team (if applicable)</label>
-                            <select className="w-full border rounded p-2" value={newEvent.team_id} onChange={e => setNewEvent({...newEvent, team_id: e.target.value})}>
-                                <option value="">None / Neutral</option>
-                                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Player Name</label>
-                            <input type="text" className="w-full border rounded p-2" value={newEvent.player_name} onChange={e => setNewEvent({...newEvent, player_name: e.target.value})} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Details / Notes</label>
-                        <input type="text" placeholder="e.g. Player A in, Player B out" className="w-full border rounded p-2" value={newEvent.details} onChange={e => setNewEvent({...newEvent, details: e.target.value})} />
-                    </div>
-                    <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full md:w-auto">Log Event</button>
                 </form>
             </div>
 
