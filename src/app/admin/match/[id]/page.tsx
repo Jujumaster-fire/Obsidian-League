@@ -105,12 +105,19 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+
   const handleUpdateMatchState = async () => {
+    await updateMatchStateHelper(status, minute)
+  }
+
+  const updateMatchStateHelper = async (newStatus: string, newMinute: number) => {
+    setStatus(newStatus)
+    setMinute(newMinute)
     const { error } = await supabase
       .from('fixtures')
       .update({
-        status,
-        current_minute: minute,
+        status: newStatus,
+        current_minute: newMinute,
         home_score: homeScore,
         away_score: awayScore,
         stats,
@@ -121,9 +128,9 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     if (error) {
       alert(error.message)
     } else {
-      alert("Match updated successfully!")
-      fetchFixtureData()
+      // Don't alert on auto-save
     }
+  }
   }
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -171,7 +178,12 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
             <h1 className="text-xl font-bold">Live Match Manager</h1>
         </div>
         <button
-          onClick={handleUpdateMatchState}
+          onClick={() => {
+              updateMatchStateHelper(status, minute).then(() => {
+                  alert("Match updated successfully!")
+                  fetchFixtureData()
+              })
+          }}
           className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 shadow-md transform hover:scale-105 transition-all"
         >
           Save All Changes
@@ -210,32 +222,32 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Match Status Actions</label>
                     <div className="flex flex-wrap gap-2">
                         {status === 'scheduled' && (
-                            <button onClick={() => { setStatus('in_progress'); setMinute(0); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
+                            <button onClick={() => updateMatchStateHelper('in_progress', 0)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
                                 Start 1st Half
                             </button>
                         )}
                         {status === 'in_progress' && minute < 45 && (
-                            <button onClick={() => { setStatus('half_time'); setMinute(45); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-yellow-500 text-white border-yellow-500 hover:bg-yellow-600">
+                            <button onClick={() => updateMatchStateHelper('half_time', 45)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-yellow-500 text-white border-yellow-500 hover:bg-yellow-600">
                                 End 1st Half
                             </button>
                         )}
                         {status === 'half_time' && (
-                            <button onClick={() => { setStatus('in_progress'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
+                            <button onClick={() => updateMatchStateHelper('in_progress', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
                                 Start 2nd Half
                             </button>
                         )}
                         {status === 'in_progress' && minute >= 45 && (
-                            <button onClick={() => { setStatus('full_time'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                            <button onClick={() => updateMatchStateHelper('full_time', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
                                 End Match (Full Time)
                             </button>
                         )}
                         {status === 'full_time' && homeScore === awayScore && (
-                            <button onClick={() => { setStatus('extra_time'); setMinute(90); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-purple-600 text-white border-purple-600 hover:bg-purple-700">
+                            <button onClick={() => updateMatchStateHelper('extra_time', 90)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-purple-600 text-white border-purple-600 hover:bg-purple-700">
                                 Start Extra Time
                             </button>
                         )}
                         {status === 'extra_time' && (
-                            <button onClick={() => { setStatus('full_time'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                            <button onClick={() => updateMatchStateHelper('full_time', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
                                 End Match (After Extra Time)
                             </button>
                         )}
@@ -249,11 +261,19 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                 <div>
                     <label className="block text-sm font-semibold mb-2 text-gray-700 flex justify-between">
                         <span>Current Minute</span>
-                        <span className="text-gray-500 font-normal">Use arrows to fine-tune</span>
                     </label>
                     <div className="flex items-center gap-4">
-                        <input type="range" min="0" max="120" value={minute} onChange={e => setMinute(parseInt(e.target.value))} className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        <input type="number" value={minute} onChange={e => setMinute(parseInt(e.target.value))} className="w-20 border rounded p-2 text-center font-bold text-lg" />
+                        <div className="flex-1 bg-gray-100 border rounded p-4 text-center text-4xl font-black text-indigo-600">
+                            {minute}'
+                        </div>
+                        <button onClick={() => {
+                            const val = prompt("Enter correct minute:", minute.toString());
+                            if (val !== null && !isNaN(parseInt(val))) {
+                                setMinute(parseInt(val));
+                            }
+                        }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-4 px-6 rounded border">
+                            Adjust Minute
+                        </button>
                     </div>
                 </div>
             </div>

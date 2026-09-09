@@ -9,9 +9,14 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
   const resolvedParams = use(params)
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
+
   const [match, setMatch] = useState<any>(null)
   const [events, setEvents] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState('Overview')
+
+  // Local timer state to keep it ticking responsively
+  const [localMinute, setLocalMinute] = useState<number>(0)
+
 
   useEffect(() => {
     fetchMatchData()
@@ -19,7 +24,12 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
     // Subscribe to live updates
     const channel = supabase.channel('match_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fixtures', filter: `id=eq.${resolvedParams.id}` }, (payload) => {
-        setMatch(payload.new)
+
+        if (payload.new) {
+          setMatch(payload.new as any)
+          setLocalMinute((payload.new as any).current_minute || 0)
+        }
+
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_events', filter: `fixture_id=eq.${resolvedParams.id}` }, (payload) => {
         setEvents(prev => [...prev, payload.new].sort((a,b) => b.minute - a.minute))
@@ -51,8 +61,23 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
     setLoading(false)
   }
 
+
+  // Local ticking timer for the public UI
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    const isLive = match?.status === 'in_progress' || match?.status === 'extra_time'
+    if (isLive) {
+      interval = setInterval(() => {
+        setLocalMinute(m => m + 1)
+      }, 60000)
+    }
+    return () => clearInterval(interval)
+  }, [match?.status])
+
   if (loading) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Loading Match Data...</div>
   if (!match) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Match not found.</div>
+
+
 
   const isLive = match.status === 'in_progress' || match.status === 'extra_time'
 
@@ -71,7 +96,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                 {isLive ? (
                     <span className="inline-flex items-center gap-2 bg-red-500/20 text-red-400 px-4 py-1 rounded-full font-bold uppercase tracking-wider text-sm border border-red-500/30">
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                        LIVE &bull; {match.current_minute}'
+                        LIVE &bull; {localMinute}'
                     </span>
                 ) : (
                     <span className="inline-block bg-white/10 text-gray-300 px-4 py-1 rounded-full font-medium text-sm border border-white/5">
