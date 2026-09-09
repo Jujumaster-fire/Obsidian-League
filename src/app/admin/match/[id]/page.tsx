@@ -131,7 +131,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       // Don't alert on auto-save
     }
   }
-  }
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -264,7 +263,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     </label>
                     <div className="flex items-center gap-4">
                         <div className="flex-1 bg-gray-100 border rounded p-4 text-center text-4xl font-black text-indigo-600">
-                            {minute}'
+                            {minute}&apos;
                         </div>
                         <button onClick={() => {
                             const val = prompt("Enter correct minute:", minute.toString());
