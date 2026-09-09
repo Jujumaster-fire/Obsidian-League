@@ -20,8 +20,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const [homeScore, setHomeScore] = useState<number>(0)
   const [awayScore, setAwayScore] = useState<number>(0)
   const [stats, setStats] = useState<any>({
-    home: { passes: 0, shots: 0, fouls: 0, corners: 0 },
-    away: { passes: 0, shots: 0, fouls: 0, corners: 0 }
+    home: { passes: 0, shots: 0, shots_on_target: 0, shots_off_target: 0, fouls: 0, corners: 0, freekicks: 0, offsides: 0, yellow_cards: 0, red_cards: 0, gk_saves: 0, interceptions: 0 },
+    away: { passes: 0, shots: 0, shots_on_target: 0, shots_off_target: 0, fouls: 0, corners: 0, freekicks: 0, offsides: 0, yellow_cards: 0, red_cards: 0, gk_saves: 0, interceptions: 0 }
   })
 
   const [newEvent, setNewEvent] = useState({ event_type: 'goal', team_id: '', player_name: '', minute: '', details: '' })
@@ -49,8 +49,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setAwayScore(data.away_score || 0)
 
       const defaultStats = {
-        home: { passes: 0, shots: 0, fouls: 0, corners: 0 },
-        away: { passes: 0, shots: 0, fouls: 0, corners: 0 }
+        home: { passes: 0, shots: 0, shots_on_target: 0, shots_off_target: 0, fouls: 0, corners: 0, freekicks: 0, offsides: 0, yellow_cards: 0, red_cards: 0, gk_saves: 0, interceptions: 0 },
+        away: { passes: 0, shots: 0, shots_on_target: 0, shots_off_target: 0, fouls: 0, corners: 0, freekicks: 0, offsides: 0, yellow_cards: 0, red_cards: 0, gk_saves: 0, interceptions: 0 }
       }
       setStats(data.stats ? { ...defaultStats, ...data.stats } : defaultStats)
     }
@@ -288,13 +288,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     {/* Home Scout Buttons */}
                     <div className="space-y-3">
                         <h4 className="font-semibold text-center text-indigo-600">{fixture.home_team.short_name} Stats</h4>
-                        {['passes', 'shots', 'fouls', 'corners'].map(stat => (
+                        {['passes', 'shots', 'shots_on_target', 'shots_off_target', 'fouls', 'corners', 'freekicks', 'offsides', 'yellow_cards', 'red_cards', 'gk_saves', 'interceptions'].map(stat => (
                             <button
                                 key={`home-${stat}`}
                                 onClick={() => incrementStat('home', stat)}
                                 className="w-full flex items-center justify-between bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-300 rounded p-3 transition-colors group"
                             >
-                                <span className="capitalize font-medium text-gray-700 group-hover:text-indigo-700">+1 {stat}</span>
+                                <span className="capitalize font-medium text-gray-700 group-hover:text-indigo-700">+1 {stat.replace(/_/g, ' ')}</span>
                                 <span className="bg-white border rounded px-2 py-1 text-sm font-bold shadow-sm">{stats.home[stat]}</span>
                             </button>
                         ))}
@@ -303,14 +303,14 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     {/* Away Scout Buttons */}
                     <div className="space-y-3">
                         <h4 className="font-semibold text-center text-blue-600">{fixture.away_team.short_name} Stats</h4>
-                        {['passes', 'shots', 'fouls', 'corners'].map(stat => (
+                        {['passes', 'shots', 'shots_on_target', 'shots_off_target', 'fouls', 'corners', 'freekicks', 'offsides', 'yellow_cards', 'red_cards', 'gk_saves', 'interceptions'].map(stat => (
                             <button
                                 key={`away-${stat}`}
                                 onClick={() => incrementStat('away', stat)}
                                 className="w-full flex items-center justify-between bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded p-3 transition-colors group"
                             >
                                 <span className="bg-white border rounded px-2 py-1 text-sm font-bold shadow-sm">{stats.away[stat]}</span>
-                                <span className="capitalize font-medium text-gray-700 group-hover:text-blue-700">+1 {stat}</span>
+                                <span className="capitalize font-medium text-gray-700 group-hover:text-blue-700">+1 {stat.replace(/_/g, ' ')}</span>
                             </button>
                         ))}
                     </div>

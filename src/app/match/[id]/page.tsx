@@ -183,7 +183,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                     <p className="text-gray-500 text-center">No data available yet.</p>
                 ) : (
                     <div className="space-y-8">
-                        {['passes', 'shots', 'fouls', 'corners'].map(stat => {
+                        {['passes', 'shots', 'shots_on_target', 'shots_off_target', 'fouls', 'corners', 'freekicks', 'offsides', 'yellow_cards', 'red_cards', 'gk_saves', 'interceptions'].map(stat => {
                             const hVal = match.stats.home?.[stat] || 0;
                             const aVal = match.stats.away?.[stat] || 0;
                             const total = hVal + aVal || 1; // prevent div by zero
@@ -194,7 +194,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                                 <div key={stat}>
                                     <div className="flex justify-between text-sm font-bold mb-2">
                                         <span className={hVal > aVal ? 'text-white' : 'text-gray-500'}>{hVal}</span>
-                                        <span className="uppercase tracking-wider text-gray-400">{stat}</span>
+                                        <span className="uppercase tracking-wider text-gray-400">{stat.replace(/_/g, ' ')}</span>
                                         <span className={aVal > hVal ? 'text-white' : 'text-gray-500'}>{aVal}</span>
                                     </div>
                                     <div className="flex h-2 bg-gray-800 rounded-full overflow-hidden">
