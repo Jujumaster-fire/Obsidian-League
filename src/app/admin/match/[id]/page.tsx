@@ -24,26 +24,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     away: { passes: 0, shots: 0, fouls: 0, corners: 0 }
   })
 
-  useEffect(() => {
-    checkAuthAndFetchData()
-  }, [])
-
-  const checkAuthAndFetchData = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) {
-      router.push('/login')
-      return
-    }
-
-    const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id).single()
-    if (roleData?.role !== 'admin') {
-      router.push('/')
-      return
-    }
-
-    setIsAdmin(true)
-    fetchFixtureData()
-  }
+  const [newEvent, setNewEvent] = useState({ event_type: 'goal', team_id: '', player_name: '', minute: '', details: '' })
 
   const fetchFixtureData = async () => {
     setLoading(true)
@@ -76,6 +57,54 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     setLoading(false)
   }
 
+  const checkAuthAndFetchData = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      router.push('/login')
+      return
+    }
+
+    const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id).single()
+    if (roleData?.role !== 'admin') {
+      router.push('/')
+      return
+    }
+
+    setIsAdmin(true)
+    fetchFixtureData()
+  }
+
+  // Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (status === 'in_progress') {
+      interval = setInterval(() => {
+        setMinute(m => m + 1)
+      }, 60000) // 1 minute in real time
+    }
+    return () => clearInterval(interval)
+  }, [status])
+
+  useEffect(() => {
+    const updateBackendMinute = async () => {
+      if (!resolvedParams.id || !isAdmin) return
+      const { error } = await supabase
+        .from('fixtures')
+        .update({ current_minute: minute })
+        .eq('id', resolvedParams.id)
+      if (error) console.error("Error auto-saving minute:", error)
+    }
+
+    if (status === 'in_progress') {
+      updateBackendMinute()
+    }
+  }, [minute, status, resolvedParams.id, isAdmin, supabase])
+
+  useEffect(() => {
+    checkAuthAndFetchData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleUpdateMatchState = async () => {
     const { error } = await supabase
       .from('fixtures')
@@ -97,8 +126,29 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     }
   }
 
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const { error } = await supabase.from('match_events').insert([{
+      ...newEvent,
+      fixture_id: resolvedParams.id,
+      minute: parseInt(newEvent.minute)
+    }])
+    if (error) alert('Error creating event: ' + error.message)
+    else {
+      alert('Event logged!')
+      setNewEvent({ ...newEvent, player_name: '', minute: minute.toString(), details: '' })
+    }
+  }
+
+  useEffect(() => {
+    if (!newEvent.minute && status === 'in_progress') {
+        setNewEvent(prev => ({ ...prev, minute: minute.toString() }))
+    }
+  }, [minute, status, newEvent.minute])
+
+
   const incrementStat = (team: 'home' | 'away', stat: string) => {
-    setStats((prev: any) => ({
+    setStats((prev: Record<string, Record<string, number>>) => ({
       ...prev,
       [team]: {
         ...prev[team],
@@ -222,6 +272,51 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     </div>
                 </div>
             </div>
+        </div>
+
+        {/* Log Match Event Form */}
+        <div className="bg-white rounded-xl shadow p-6 border border-gray-200 md:col-span-2 mt-8">
+            <h3 className="text-lg font-bold border-b pb-2 mb-4">Log Match Event</h3>
+            <form onSubmit={handleCreateEvent} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Event Type</label>
+                        <select required className="w-full border rounded p-2" value={newEvent.event_type} onChange={e => setNewEvent({...newEvent, event_type: e.target.value})}>
+                            <option value="goal">Goal</option>
+                            <option value="red_card">Red Card</option>
+                            <option value="yellow_card">Yellow Card</option>
+                            <option value="corner">Corner</option>
+                            <option value="free_kick">Free Kick</option>
+                            <option value="substitution">Substitution</option>
+                            <option value="half_time_whistle">Half Time</option>
+                            <option value="full_time_whistle">Full Time</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Minute</label>
+                        <input type="number" required min="1" max="120" className="w-full border rounded p-2" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Team (if applicable)</label>
+                        <select className="w-full border rounded p-2" value={newEvent.team_id} onChange={e => setNewEvent({...newEvent, team_id: e.target.value})}>
+                            <option value="">None / Neutral</option>
+                            <option value={fixture.home_team.id}>{fixture.home_team.name} (Home)</option>
+                            <option value={fixture.away_team.id}>{fixture.away_team.name} (Away)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Player Name</label>
+                        <input type="text" className="w-full border rounded p-2" value={newEvent.player_name} onChange={e => setNewEvent({...newEvent, player_name: e.target.value})} />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium mb-1">Details / Notes</label>
+                    <input type="text" placeholder="e.g. Player A in, Player B out" className="w-full border rounded p-2" value={newEvent.details} onChange={e => setNewEvent({...newEvent, details: e.target.value})} />
+                </div>
+                <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full md:w-auto">Log Event</button>
+            </form>
         </div>
 
       </div>
