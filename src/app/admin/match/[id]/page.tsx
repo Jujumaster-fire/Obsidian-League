@@ -77,7 +77,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   // Timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (status === 'in_progress') {
+    if (status === 'in_progress' || status === 'extra_time') {
       interval = setInterval(() => {
         setMinute(m => m + 1)
       }, 60000) // 1 minute in real time
@@ -95,7 +95,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       if (error) console.error("Error auto-saving minute:", error)
     }
 
-    if (status === 'in_progress') {
+    if (status === 'in_progress' || status === 'extra_time') {
       updateBackendMinute()
     }
   }, [minute, status, resolvedParams.id, isAdmin, supabase])
@@ -141,7 +141,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   }
 
   useEffect(() => {
-    if (!newEvent.minute && status === 'in_progress') {
+    if (!newEvent.minute && (status === 'in_progress' || status === 'extra_time')) {
         setNewEvent(prev => ({ ...prev, minute: minute.toString() }))
     }
   }, [minute, status, newEvent.minute])
@@ -207,17 +207,42 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                 <h3 className="text-lg font-bold border-b pb-2">Match Controls</h3>
 
                 <div>
-                    <label className="block text-sm font-semibold mb-2 text-gray-700">Match Status</label>
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Match Status Actions</label>
                     <div className="flex flex-wrap gap-2">
-                        {['scheduled', 'in_progress', 'half_time', 'full_time', 'cancelled'].map(s => (
-                            <button
-                                key={s}
-                                onClick={() => setStatus(s)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium border capitalize ${status === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                            >
-                                {s.replace('_', ' ')}
+                        {status === 'scheduled' && (
+                            <button onClick={() => { setStatus('in_progress'); setMinute(0); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
+                                Start 1st Half
                             </button>
-                        ))}
+                        )}
+                        {status === 'in_progress' && minute < 45 && (
+                            <button onClick={() => { setStatus('half_time'); setMinute(45); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-yellow-500 text-white border-yellow-500 hover:bg-yellow-600">
+                                End 1st Half
+                            </button>
+                        )}
+                        {status === 'half_time' && (
+                            <button onClick={() => { setStatus('in_progress'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
+                                Start 2nd Half
+                            </button>
+                        )}
+                        {status === 'in_progress' && minute >= 45 && (
+                            <button onClick={() => { setStatus('full_time'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                                End Match (Full Time)
+                            </button>
+                        )}
+                        {status === 'full_time' && homeScore === awayScore && (
+                            <button onClick={() => { setStatus('extra_time'); setMinute(90); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-purple-600 text-white border-purple-600 hover:bg-purple-700">
+                                Start Extra Time
+                            </button>
+                        )}
+                        {status === 'extra_time' && (
+                            <button onClick={() => { setStatus('full_time'); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                                End Match (After Extra Time)
+                            </button>
+                        )}
+
+                        <div className="w-full mt-2 pt-2 border-t text-sm text-gray-500">
+                           Current Status: <span className="font-bold uppercase text-gray-700">{status.replace('_', ' ')}</span>
+                        </div>
                     </div>
                 </div>
 
