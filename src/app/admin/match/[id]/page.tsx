@@ -153,14 +153,26 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   }, [minute, status, newEvent.minute])
 
 
-  const incrementStat = (team: 'home' | 'away', stat: string) => {
-    setStats((prev: Record<string, Record<string, number>>) => ({
-      ...prev,
+  const incrementStat = async (team: 'home' | 'away', stat: string) => {
+    const newStats = {
+      ...stats,
       [team]: {
-        ...prev[team],
-        [stat]: (prev[team][stat] || 0) + 1
+        ...stats[team],
+        [stat]: (stats[team][stat] || 0) + 1
       }
-    }))
+    }
+
+    setStats(newStats)
+
+    // Instantly sync to backend
+    const { error } = await supabase
+      .from('fixtures')
+      .update({ stats: newStats })
+      .eq('id', resolvedParams.id)
+
+    if (error) {
+      console.error("Failed to sync stat update:", error)
+    }
   }
 
   if (loading) return <div className="p-10 text-center">Loading Live Match Manager...</div>
@@ -281,7 +293,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
             <div className="bg-white rounded-xl shadow p-6 border border-gray-200 space-y-6">
                 <h3 className="text-lg font-bold border-b pb-2 flex items-center justify-between">
                     <span>Live Scout Tracker</span>
-                    <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Auto-saves to local state. Click Save All above.</span>
+                    <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Auto-saves instantly.</span>
                 </h3>
 
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
