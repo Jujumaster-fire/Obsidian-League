@@ -54,7 +54,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
   if (loading) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Loading Match Data...</div>
   if (!match) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Match not found.</div>
 
-  const isLive = match.status === 'in_progress'
+  const isLive = match.status === 'in_progress' || match.status === 'extra_time'
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white pb-32">
@@ -75,7 +75,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                     </span>
                 ) : (
                     <span className="inline-block bg-white/10 text-gray-300 px-4 py-1 rounded-full font-medium text-sm border border-white/5">
-                        {match.status === 'full_time' ? 'Full Time' : match.status === 'cancelled' ? 'Cancelled' : new Date(match.match_date).toLocaleString([], {weekday:'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                        {match.status === 'full_time' ? 'Full Time' : match.status === 'half_time' ? 'Half Time' : match.status === 'cancelled' ? 'Cancelled' : new Date(match.match_date).toLocaleString([], {weekday:'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
                     </span>
                 )}
             </div>
