@@ -15,7 +15,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
   const [activeTab, setActiveTab] = useState('Overview')
 
   // Local timer state to keep it ticking responsively
-  const [localMinute, setLocalMinute] = useState<number>(0)
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
 
 
   useEffect(() => {
@@ -25,10 +25,17 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
     const channel = supabase.channel('match_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fixtures', filter: `id=eq.${resolvedParams.id}` }, (payload) => {
 
+
         if (payload.new) {
-          setMatch(payload.new as any)
-          setLocalMinute((payload.new as any).current_minute || 0)
+          const newFixture = payload.new as any
+          setMatch(newFixture)
+          const baseElapsed = newFixture.stats?.elapsed_seconds || (newFixture.current_minute ? newFixture.current_minute * 60 : 0)
+          // Don't arbitrarily overwrite if the clock is running, let the effect handle it unless it's a structural update
+          if (newFixture.status !== 'in_progress' && newFixture.status !== 'extra_time') {
+              setElapsedSeconds(baseElapsed)
+          }
         }
+
 
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_events', filter: `fixture_id=eq.${resolvedParams.id}` }, (payload) => {
@@ -49,30 +56,41 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
       .eq('id', resolvedParams.id)
       .single()
 
+
     if (fixture) {
       setMatch(fixture)
-      const { data: eventData } = await supabase
-        .from('match_events')
-        .select('*')
-        .eq('fixture_id', fixture.id)
-        .order('minute', { ascending: false })
-      if(eventData) setEvents(eventData)
+      const baseElapsed = fixture.stats?.elapsed_seconds || (fixture.current_minute ? fixture.current_minute * 60 : 0)
+      setElapsedSeconds(baseElapsed)
     }
+
     setLoading(false)
   }
+
 
 
   // Local ticking timer for the public UI
   useEffect(() => {
     let interval: NodeJS.Timeout
     const isLive = match?.status === 'in_progress' || match?.status === 'extra_time'
-    if (isLive) {
+    if (isLive && match?.stats?.timer_started_at) {
       interval = setInterval(() => {
-        setLocalMinute(m => m + 1)
-      }, 60000)
+        const now = new Date().getTime()
+        const started = new Date(match.stats.timer_started_at).getTime()
+        const diffSeconds = Math.floor((now - started) / 1000)
+        setElapsedSeconds((match.stats.elapsed_seconds || 0) + diffSeconds)
+      }, 1000)
     }
     return () => clearInterval(interval)
-  }, [match?.status])
+  }, [match?.status, match?.stats?.timer_started_at, match?.stats?.elapsed_seconds, match])
+
+  useEffect(() => {
+    const isLive = match?.status === 'in_progress' || match?.status === 'extra_time'
+    if (!isLive && match) {
+      // Synchronize when paused or ended initially without ticking
+      setElapsedSeconds(match.stats?.elapsed_seconds || (match.current_minute ? match.current_minute * 60 : 0))
+    }
+  }, [match?.status, match?.stats?.elapsed_seconds, match])
+
 
   if (loading) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Loading Match Data...</div>
   if (!match) return <div className="min-h-screen bg-[#0f172a] text-white flex items-center justify-center">Match not found.</div>
@@ -96,7 +114,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                 {isLive ? (
                     <span className="inline-flex items-center gap-2 bg-red-500/20 text-red-400 px-4 py-1 rounded-full font-bold uppercase tracking-wider text-sm border border-red-500/30">
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                        LIVE &bull; {match.status === 'full_time' ? 'Full Time' : match.status === 'half_time' ? 'Half Time' : `${localMinute}'`}
+                        LIVE &bull; {match.status === 'full_time' ? 'Full Time' : match.status === 'half_time' ? 'Half Time' : `${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}`}
                     </span>
                 ) : (
                     <span className="inline-block bg-white/10 text-gray-300 px-4 py-1 rounded-full font-medium text-sm border border-white/5">
