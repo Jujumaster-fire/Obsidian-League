@@ -16,6 +16,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
   // Local state for edits
   const [minute, setMinute] = useState<number>(0)
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
+  const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const [status, setStatus] = useState<string>('scheduled')
   const [homeScore, setHomeScore] = useState<number>(0)
   const [awayScore, setAwayScore] = useState<number>(0)
@@ -45,6 +47,10 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setFixture(data)
       setMinute(data.current_minute || 0)
       setStatus(data.status || 'scheduled')
+      const initialElapsed = data.stats?.elapsed_seconds || (data.current_minute ? data.current_minute * 60 : 0)
+      const startedAt = data.stats?.timer_started_at || null
+      setElapsedSeconds(initialElapsed)
+      setTimerStartedAt(startedAt)
       setHomeScore(data.home_score || 0)
       setAwayScore(data.away_score || 0)
 
@@ -74,31 +80,42 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     fetchFixtureData()
   }
 
-  // Timer effect
+  // Timer effect for precise seconds
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (status === 'in_progress' || status === 'extra_time') {
+    if ((status === 'in_progress' || status === 'extra_time') && timerStartedAt) {
       interval = setInterval(() => {
-        setMinute(m => m + 1)
-      }, 60000) // 1 minute in real time
+        const now = new Date().getTime()
+        const started = new Date(timerStartedAt).getTime()
+        const diffSeconds = Math.floor((now - started) / 1000)
+        setElapsedSeconds((stats?.elapsed_seconds || 0) + diffSeconds)
+        setMinute(Math.floor(((stats?.elapsed_seconds || 0) + diffSeconds) / 60))
+      }, 1000) // Update local UI every second
     }
     return () => clearInterval(interval)
-  }, [status])
+  }, [status, timerStartedAt, stats?.elapsed_seconds])
 
+  // Periodically auto-save the minute for legacy compatibility, but precision is in stats
   useEffect(() => {
-    const updateBackendMinute = async () => {
+    const updateBackendTimer = async () => {
       if (!resolvedParams.id || !isAdmin) return
+
       const { error } = await supabase
         .from('fixtures')
-        .update({ current_minute: minute })
+        .update({
+           current_minute: minute,
+           // Note: we don't save elapsed_seconds here because it's driven by timerStartedAt.
+           // We only update timerStartedAt/elapsed_seconds when starting/stopping the timer.
+        })
         .eq('id', resolvedParams.id)
-      if (error) console.error("Error auto-saving minute:", error)
+      if (error) console.error("Error auto-saving timer:", error)
     }
 
-    if (status === 'in_progress' || status === 'extra_time') {
-      updateBackendMinute()
+    if ((status === 'in_progress' || status === 'extra_time') && minute % 1 === 0) { // Every minute
+      updateBackendTimer()
     }
-  }, [minute, status, resolvedParams.id, isAdmin, supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minute])
 
   useEffect(() => {
     checkAuthAndFetchData()
@@ -110,9 +127,40 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     await updateMatchStateHelper(status, minute)
   }
 
-  const updateMatchStateHelper = async (newStatus: string, newMinute: number) => {
+  const updateMatchStateHelper = async (newStatus: string, newMinute: number, setTimer: boolean = true) => {
     setStatus(newStatus)
     setMinute(newMinute)
+
+    let updatedStats = { ...stats }
+    let newElapsed = newMinute * 60
+
+    if (newStatus === 'in_progress' || newStatus === 'extra_time') {
+        if (setTimer) {
+            // Started/resumed
+            updatedStats.timer_started_at = new Date().toISOString()
+            // If we are strictly starting a half, override elapsed. If resuming, keep old.
+            if (newStatus === 'in_progress' && newMinute === 0) updatedStats.elapsed_seconds = 0
+            else if (newStatus === 'in_progress' && newMinute === 45) updatedStats.elapsed_seconds = 45 * 60
+            else if (newStatus === 'extra_time' && newMinute === 90) updatedStats.elapsed_seconds = 90 * 60
+
+            setTimerStartedAt(updatedStats.timer_started_at)
+            if (updatedStats.elapsed_seconds !== undefined) setElapsedSeconds(updatedStats.elapsed_seconds)
+        }
+    } else if (newStatus === 'paused') {
+        // Paused. Save exact elapsed seconds and clear startedAt.
+        updatedStats.elapsed_seconds = elapsedSeconds
+        updatedStats.timer_started_at = null
+        setTimerStartedAt(null)
+    } else {
+        // Stopped/Ended
+        updatedStats.elapsed_seconds = newElapsed
+        updatedStats.timer_started_at = null
+        setTimerStartedAt(null)
+        setElapsedSeconds(newElapsed)
+    }
+
+    setStats(updatedStats)
+
     const { error } = await supabase
       .from('fixtures')
       .update({
@@ -120,7 +168,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
         current_minute: newMinute,
         home_score: homeScore,
         away_score: awayScore,
-        stats,
+        stats: updatedStats,
         updated_at: new Date().toISOString()
       })
       .eq('id', resolvedParams.id)
@@ -252,6 +300,17 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                                 End Match (Full Time)
                             </button>
                         )}
+                        {status === 'in_progress' && (
+                            <button onClick={() => updateMatchStateHelper('paused', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-orange-500 text-white border-orange-500 hover:bg-orange-600">
+                                Pause Match
+                            </button>
+                        )}
+                        {status === 'paused' && (
+                            <button onClick={() => updateMatchStateHelper('in_progress', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700">
+                                Resume Match
+                            </button>
+                        )}
+
                         {status === 'full_time' && homeScore === awayScore && (
                             <button onClick={() => updateMatchStateHelper('extra_time', 90)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-purple-600 text-white border-purple-600 hover:bg-purple-700">
                                 Start Extra Time
@@ -274,17 +333,25 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                         <span>Current Minute</span>
                     </label>
                     <div className="flex items-center gap-4">
+
                         <div className="flex-1 bg-gray-100 border rounded p-4 text-center text-4xl font-black text-indigo-600">
-                            {status === 'full_time' ? 'Full Time' : status === 'half_time' ? 'Half Time' : `${minute}'`}
+                            {status === 'full_time' ? 'Full Time' : status === 'half_time' ? 'Half Time' : `${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}`}
                         </div>
                         <button onClick={() => {
                             const val = prompt("Enter correct minute:", minute.toString());
                             if (val !== null && !isNaN(parseInt(val))) {
-                                setMinute(parseInt(val));
+                                const newMin = parseInt(val)
+                                setMinute(newMin);
+                                setElapsedSeconds(newMin * 60)
+                                const overrideStats = { ...stats, elapsed_seconds: newMin * 60, timer_started_at: new Date().toISOString() }
+                                setStats(overrideStats)
+                                setTimerStartedAt(overrideStats.timer_started_at)
+                                supabase.from('fixtures').update({ current_minute: newMin, stats: overrideStats }).eq('id', resolvedParams.id).then()
                             }
                         }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-4 px-6 rounded border">
                             Adjust Minute
                         </button>
+
                     </div>
                 </div>
             </div>
@@ -343,7 +410,9 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                             <option value="yellow_card">Yellow Card</option>
                             <option value="corner">Corner</option>
                             <option value="free_kick">Free Kick</option>
-                            <option value="substitution">Substitution</option>
+                                                        <option value="substitution">Substitution</option>
+                            <option value="injury">Injury</option>
+                            <option value="water_break">Water Break</option>
                             <option value="half_time_whistle">Half Time</option>
                             <option value="full_time_whistle">Full Time</option>
                         </select>
