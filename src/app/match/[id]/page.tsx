@@ -96,7 +96,7 @@ export default function MatchCenter({ params }: { params: Promise<{ id: string }
                 {isLive ? (
                     <span className="inline-flex items-center gap-2 bg-red-500/20 text-red-400 px-4 py-1 rounded-full font-bold uppercase tracking-wider text-sm border border-red-500/30">
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                        LIVE &bull; {localMinute}'
+                        LIVE &bull; {match.status === 'full_time' ? 'Full Time' : match.status === 'half_time' ? 'Half Time' : `${localMinute}'`}
                     </span>
                 ) : (
                     <span className="inline-block bg-white/10 text-gray-300 px-4 py-1 rounded-full font-medium text-sm border border-white/5">

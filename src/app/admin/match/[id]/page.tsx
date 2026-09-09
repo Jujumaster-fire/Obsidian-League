@@ -236,7 +236,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                             </button>
                         )}
                         {status === 'in_progress' && minute >= 45 && (
-                            <button onClick={() => updateMatchStateHelper('full_time', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                            <button onClick={() => updateMatchStateHelper('full_time', 90)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
                                 End Match (Full Time)
                             </button>
                         )}
@@ -246,7 +246,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                             </button>
                         )}
                         {status === 'extra_time' && (
-                            <button onClick={() => updateMatchStateHelper('full_time', minute)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
+                            <button onClick={() => updateMatchStateHelper('full_time', 120)} className="px-4 py-2 rounded-lg text-sm font-medium border bg-red-600 text-white border-red-600 hover:bg-red-700">
                                 End Match (After Extra Time)
                             </button>
                         )}
@@ -263,7 +263,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                     </label>
                     <div className="flex items-center gap-4">
                         <div className="flex-1 bg-gray-100 border rounded p-4 text-center text-4xl font-black text-indigo-600">
-                            {minute}&apos;
+                            {status === 'full_time' ? 'Full Time' : status === 'half_time' ? 'Half Time' : `${minute}'`}
                         </div>
                         <button onClick={() => {
                             const val = prompt("Enter correct minute:", minute.toString());
