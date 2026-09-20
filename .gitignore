@@ -32,9 +32,18 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but keep the documented template in version control.
+!.env.example
 
 # vercel
 .vercel
+
+# supabase CLI local state (project ref, temp dumps)
+supabase/.temp/
+
+# scratch files
+.tmp-*.bat
+.tmp-*.sh
 
 # typescript
 *.tsbuildinfo

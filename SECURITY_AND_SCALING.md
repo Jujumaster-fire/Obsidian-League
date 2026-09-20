@@ -1,6 +1,25 @@
 # Architecture & Security Guidelines: Scaling to 3 Million Users
 
-This document outlines the security measures and architectural recommendations required for the Obsidian Elite Tournament Manager to handle 3 million concurrent users securely and efficiently.
+This document outlines the security measures and architectural recommendations
+required for the Obsidian Elite Tournament Manager to handle 3 million concurrent
+users securely and efficiently.
+
+> **Implementation status (current):** items marked ✅ below are already wired in
+> the codebase; the rest is the staged roadmap.
+
+## 0. What is already implemented
+
+| Area | Implementation |
+| --- | --- |
+| ✅ Public read caching | `restGet`/`cachedRestGet` — anon-key PostgREST reads through the Next.js Data Cache (`revalidate` 30 s–1 h, shared `public-data` tag) |
+| ✅ Shared cache layer | Upstash Redis (`src/lib/cache.ts`) for heavy semi-static reads (articles, medals, team directory, config) with an in-memory fallback; live scores never cached |
+| ✅ On-demand invalidation | `POST /api/revalidate` — expires the tag (`revalidateTag(tag, { expire: 0 })`) **and** purges the Redis keys; admin-only (403 otherwise) |
+| ✅ Rate limiting | Upstash sliding window (`src/lib/rate-limit.ts`) on `/api/*`, in-process fallback; Supabase Auth limits remain the anti-brute-force layer |
+| ✅ Atomic writes | `record_score()` / `record_stat()` RPCs — duty-checked in Postgres, no read-modify-write races |
+| ✅ RLS everywhere | Every table behind RLS; legacy `is_admin()` write policies tightened to `app_admin` (migrations 07 + 09); member-scoped policies with duty checks (migration 06) |
+| ✅ Security headers | CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` via `next.config.ts` |
+| ✅ Observability | Sentry (100% errors, 10% traces by default), route-handler breadcrumbs for admin writes |
+| ✅ SEO/pagination-ready | `robots.txt`, `sitemap.xml` (hourly), per-page metadata |
 
 ## 1. Authentication Security (Anti-Spam & Overload)
 
@@ -8,13 +27,13 @@ Handling a massive user base requires strict protection against brute-force atta
 
 *   **Supabase Rate Limiting:**
     *   Configure strict email rate limits within the Supabase Auth settings to prevent spamming sign-up and password reset endpoints.
-    *   Implement IP-based rate limiting on the Supabase project level (via Cloudflare/Supabase custom domains) to block malicious IPs attempting thousands of logins.
-*   **Next.js Middleware Rate Limiting:**
-    *   Implement custom Next.js Middleware that tracks login attempts per IP address using a fast, in-memory store like Redis (e.g., Upstash Redis). If an IP exceeds 5 failed attempts in 5 minutes, temporarily block them.
+    *   ✅ Implemented in-app: `/api/*` handlers are rate limited per IP (Upstash shared window, in-process fallback).
+*   **Next.js Proxy Rate Limiting (edge):**
+    *   For a hard global limit in front of *everything*, add Cloudflare rules or an Upstash-backed limiter in the proxy. The current in-app limiter covers the app's own API surface.
 *   **CAPTCHA Integration:**
-    *   Integrate Cloudflare Turnstile or Google reCAPTCHA v3 invisibly on the sign-in and sign-up forms. This prevents automated bot networks from overwhelming the auth endpoints without disrupting genuine users.
+    *   Integrate Cloudflare Turnstile invisibly on the sign-in/sign-up forms (Supabase supports Turnstile server-side) — recommended before public launch.
 *   **Role-Based Access Control (RBAC):**
-    *   As implemented in the database schema, admin privileges are strictly derived from the `user_roles` table in the database, secured by Row Level Security (RLS). The frontend should *never* dictate a user's role.
+    *   ✅ Admin privileges derive strictly from the `user_roles` + `tournament_members` tables secured by RLS; the frontend never dictates a role.
 
 ## 2. Scaling Architecture (Handling 3 Million Users)
 

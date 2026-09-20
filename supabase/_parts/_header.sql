@@ -1,0 +1,71 @@
+-- ============================================================================
+-- Obsidian Elite — COMPLETE DATABASE SETUP (single source of truth)
+-- ============================================================================
+-- This one file is the entire database: schema, seed data, row level security,
+-- realtime configuration, scope/duty authority and every write RPC the app
+-- uses. It replaces the old supabase/schema.sql, supabase/schema_updates.sql
+-- and supabase/migrations/*.sql — do not reintroduce per-change migration
+-- files; edit this file instead.
+--
+-- HOW TO RUN
+--   Supabase SQL editor : paste the whole file and run it.
+--   Supabase CLI        : supabase db execute --file supabase/db-setup.sql
+--   psql                : psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/db-setup.sql
+--
+-- SAFE TO RUN REPEATEDLY
+--   Every statement is idempotent: CREATE ... IF NOT EXISTS, ADD COLUMN IF NOT
+--   EXISTS, CREATE OR REPLACE FUNCTION, policies dropped by name before being
+--   recreated, guarded constraint/foreign-key blocks, and guarded publication
+--   membership. Running it twice on the same project is a no-op, so the same
+--   file serves both "first setup" and "apply the latest changes".
+--
+--   One deliberate exception: seed rows are inserted with ON CONFLICT DO
+--   NOTHING (and clock/medals blocks merged with ||), so editable data — a
+--   vocabulary an app admin has customised — is never overwritten by a re-run.
+--
+-- WHAT IT CONTAINS (read top to bottom; each part is independent)
+--   PART 0      base schema (roles, teams, fixtures, match_events, settings) + RLS
+--   PART 01     team staff columns
+--   PART 02     tournaments, tournament scoping, cascade FKs
+--   PART 03     sports catalogue, divisions, per-tournament sports, fixture scoring columns
+--   PART 04     seed: Coal City Games Enugu 2026 + 18-sport catalogue
+--   PART 05     athletes, fixture_entries, players, squads, realtime publication
+--   PART 06     role split (app_admin/tournament_admin/user), members, invites, first RPCs
+--   PART 07     tighten legacy write policies to app_admin
+--   PART 08     tournament posts (news/articles)
+--   PART 09     policy hardening, scale indexes, admin RPCs, is_app_admin()
+--   PART 10     African/Nigerian catalogue expansion (39 sports) + atomic clock RPC
+--   PART 11     athlete CRUD + fixture-entry RPCs
+--   PART 12     FUTSAL + data-driven rules (per-fixture clock/vocab overrides,
+--               vocabulary format CHECK so event types are not hardcoded)
+--   PART 13     SCOPE AUTHORITY: duty tokens, can_write_fixture(), fixture_loggers
+--               (one logger per stream), attribution, duty-scoped policies
+--   PART 14     RECORDER RPCs: stats, score, clock, events, entries, rules,
+--               catalogue editing — every write the live console performs
+--
+-- ROLES
+--   app_admin         full control of the platform (users, sports catalogue, all tournaments)
+--   tournament_admin  member of specific tournaments only; power comes from `duties`
+--   user              public site only
+--
+-- DUTIES (public.tournament_members.duties — see PART 13 for the full grammar)
+--   '*'         full manager of that tournament
+--   'score'     scoreboard + clock + own stats and events
+--   'clock'     clock/period control only
+--   'posts'     news & articles
+--   'roster'    teams, players, athletes
+--   'entry'     fixture entries / results / medals
+--   'stat:<key>'             one counter (e.g. stat:shots) — every fixture of the tournament
+--   'event:<type>'           one timeline event type (e.g. event:goal)
+--   'fixture:<uuid>'         everything, but only on that one fixture (match scout)
+--   'stat:<key>@<fixture>'   one counter on one fixture
+--   'event:<type>@<fixture>' one event type on one fixture
+--
+-- SECURITY MODEL
+--   * RLS is enabled on every table; missing policy = no access.
+--   * Reads are public for competition data; writes are app_admin or duty-scoped.
+--   * The browser never writes live data tables directly — it calls the
+--     SECURITY DEFINER RPCs in PART 14, which re-check scope and vocabulary in
+--     Postgres, so a forged request cannot exceed the caller's duties.
+--   * Scoped functions are SECURITY DEFINER with an explicit SET search_path.
+-- ============================================================================

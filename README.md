@@ -1,86 +1,137 @@
-# Obsidian Elite Tournament Manager
+# Obsidian Elite - Tournament Manager
 
-A robust, full-stack Next.js application designed to manage high-traffic football tournaments. Built for scalability to handle millions of concurrent users with edge caching and Supabase integration.
+A full-stack tournament management platform for multi-sport games: public
+fixtures, live match tracking, squad/roster management, medal tables,
+news publishing and a scoped admin console. Built with **Next.js 16**, **React
+19**, **Tailwind v4** and **Supabase**, and designed for high-traffic public
+pages (ISR + shared cache) with a small, heavily-scoped write surface.
+
+The first tournament hosted on the app is **Coal City Games 2026**
+(Enugu, 27 Nov → 11 Dec 2026), seeded by
+`supabase/migrations/04_seed_ccgames2026.sql` together with an 18-sport
+catalogue.
+
+---
 
 ## Features
 
-- **Public Hub**: View scheduled fixtures and real-time match events.
-- **Admin Dashboard**: Secure, role-based access for entering match fixtures and logging live match events (goals, red cards, corners, substitutions, etc.).
-- **Authentication**: Secure Google and Email/Password sign-in powered by Supabase Auth.
-- **Highly Scalable**: Prepared for edge caching, connection pooling, and CDN delivery to handle massive spikes in traffic.
+### Public hub
+| Route | What it does |
+| --- | --- |
+| `/` | Matches of the day, upcoming fixtures, recent results, the **Latest Insights** article carousel and the **team registration** banner (WhatsApp / email with a prefilled message) |
+| `/competitions` | Results, fixtures, group tables, play-off bracket and player/team stats |
+| `/match/[id]` | Live scoreboard, timeline of events, statistics, line-ups, standings |
+| `/teams` + `/team/[id]` | Team directory (search + category/sport/group filters) and team profiles with squad and staff |
+| `/news` + `/news/[slug]` | Articles written by tournament staff |
+| `/medals` | Gold/silver/bronze standings per team and per athlete |
+| `/onboarding` | The guide: every feature explained for Fans · Users · Scouts · Tournament admins · App admins, plus the in-app guided tour of the real controls |
+| `/login`, `/invite/[token]` | Sign in / sign up (email, password reset, Google) and tournament invite acceptance |
+
+### Admin console (role-gated, tournament-scoped)
+| Route | What it does |
+| --- | --- |
+| `/admin` | Dashboard: pick a working tournament, register teams (with a **squad checklist**: name + shirt number, add/edit/reorder/remove), schedule fixtures (edit/delete), save tournament settings |
+| `/admin/tournaments` | Tournament CRUD + "make active" (single-active enforced by the DB) |
+| `/admin/tournaments/[id]` | Overview, settings, article CRUD, invite create/revoke/copy-link, member roster, per-sport enablement (app admins) |
+| `/admin/posts` | Newsroom: filter/search articles, draft↔publish, edit, delete |
+| `/admin/users` | App-admin-only directory with role management |
+| `/admin/match/[id]` | Live match manager: clock (start/pause/half-time/full-time/extra time), atomic score + per-stat writes, event logging with scorer/assist, event deletion |
+
+### Roles & permissions
+- `app_admin` - everything, plus user/role administration and global tables.
+- `tournament_admin` - scoped to the tournaments they are a member of, with a
+  `duties` array (`*` = full manager, or specific duties such as `score`, `posts`).
+- `user` - public site only.
+- Authorization is enforced in **Postgres RLS** (plus `SECURITY DEFINER` RPCs that
+  re-check duties); the UI only mirrors it, never decides it.
 
 ---
 
-## Deployment Guide (Vercel & Supabase)
+## Local development
 
-Since this codebase is hosted entirely on GitHub, deploying it to Vercel is the most seamless and secure approach. **Do not commit actual `.env` files to GitHub.**
+```powershell
+npm install
+copy .env.example .env.local     # then paste your Supabase URL + anon key
+npm run dev                      # http://localhost:3000
+```
 
-### 1. Set Up the Database (Supabase)
+Useful scripts:
 
-1. Create a new project at [Supabase](https://supabase.com/dashboard).
-2. Go to **Project Settings** (gear icon) -> **API**.
-3. Keep this tab open; you will need the **Project URL** and the **anon public API Key** for Vercel.
-4. Go to the **SQL Editor** (terminal icon on the left).
-5. Open the `supabase/schema.sql` file from this GitHub repository, copy its contents, and paste it into the Supabase SQL Editor.
-6. Click **Run**. This instantly provisions your tables (`teams`, `fixtures`, `match_events`, `user_roles`) and sets up Row Level Security (RLS).
-7. *Optional but recommended:* Set up Supabase Auth rate limiting in **Authentication -> Rate Limits** to protect against sign-in spam.
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | dev server (Turbopack) |
+| `npm run build` / `npm start` | production build / serve |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (0 errors expected) |
+| `npm run smoke [url]` | post-deploy smoke test (defaults to `http://localhost:3000`) |
+| `npm run db:push` / `npm run db:list` | apply / inspect Supabase migrations |
+| `python scripts/subset-fonts.py` | re-generate the self-hosted Inter `woff2` files |
 
-### 2. Deploy to Vercel
-
-1. Log in to [Vercel](https://vercel.com/) and click **Add New... -> Project**.
-2. Import your GitHub repository containing this codebase.
-3. Vercel will automatically detect that this is a Next.js project. Leave the Build and Output Settings as their defaults.
-4. Expand the **Environment Variables** section. Add the following two variables using the credentials from your Supabase API settings:
-   - Name: `NEXT_PUBLIC_SUPABASE_URL` | Value: *(Your Supabase Project URL)*
-   - Name: `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Value: *(Your Supabase anon key)*
-5. Click **Deploy**. Vercel will build the application and securely inject your database keys.
-
-### 3. Creating Your First Admin User
-
-By default, anyone who signs up is a standard user. To grant yourself admin access to the dashboard:
-
-1. Visit your live Vercel site and create an account via the Sign In page.
-2. Go back to your Supabase Dashboard -> **Authentication** -> **Users**. Find your user ID (UUID).
-3. Go to the **Table Editor** -> `user_roles` table.
-4. Insert a new row:
-   - `user_id`: *(Paste your UUID)*
-   - `role`: `admin`
-5. Refresh your live site. You will now see the "Go to Admin Dashboard" button and have write access to create fixtures.
+The app runs without Sentry or Upstash credentials - both integrations degrade
+gracefully. Nothing is required beyond the Supabase URL + anon key.
 
 ---
 
-## Local Development (Optional)
+## Documentation
 
-If you ever decide to pull the code down to your local machine to test changes:
+| File | Contents |
+| --- | --- |
+| [`DEPLOY.md`](./DEPLOY.md) | Full deployment guide: env vars, migrations, auth setup, first admin, verification, placeholder inventory, operations & rollback |
+| [`FESO.md`](./FESO.md) | Delivery log: what each workstream delivered, the registration message template, and the remaining known gaps |
+| [`SECURITY_AND_SCALING.md`](./SECURITY_AND_SCALING.md) | Security model and the scale-up roadmap (cache, realtime, replicas, rate limiting) |
+| `/onboarding` (in-app) | Role guide (Fans · Users · Scouts · Tournament admins · App admins) plus the guided component tour — the canonical feature reference for every level of user |
+| [`public/fonts/README.md`](./public/fonts/README.md) | Font pipeline (subset + woff2 conversion) |
 
-1. Clone the repository.
-2. Run `npm install`.
-3. Copy the `.env.example` file to a new file named `.env.local` and fill in your Supabase credentials. **(Ensure `.env.local` remains ignored by git).**
-4. Run `npm run dev` to start the local server on `http://localhost:3000`.
+## Project structure
 
-## Architecture & Security
+```
+src/
+  app/                      routes (public hub, admin console, auth, api)
+  components/               shared UI (Navigation, skeletons, HomeInsights...)
+  components/admin/         admin widgets + roster checklist editors
+  lib/
+    admin-auth.ts           server-side role/membership resolution
+    use-admin-auth.ts       client mirror via /api/admin-auth-info
+    public-api.ts           cached public reads (restGet / cachedRestGet)
+    cache.ts                Upstash Redis layer (in-memory fallback)
+    rate-limit.ts           Upstash sliding window (in-process fallback)
+    monitoring.ts           Sentry helpers + sampling config
+    registration.ts         team-registration links + message template
+  proxy.ts                  session refresh + optimistic /admin gate
+supabase/
+  config.toml               Supabase CLI project config
+  migrations/01...11          schema source of truth (idempotent)
+  schema*.sql               legacy origin schema (history only)
+scripts/
+  smoke.mjs                 deployment smoke test
+  subset-fonts.py           Inter subset → woff2 pipeline
+```
 
-For detailed information on how this application is architected to handle 3 million concurrent users, please read the [`SECURITY_AND_SCALING.md`](./SECURITY_AND_SCALING.md) file included in this repository.
+---
 
-### 4. Enable Google Authentication
+## Architecture notes
 
-To allow users to sign in with their Google accounts, you need to link Google Cloud and Supabase.
-
-**Part 1: Give Supabase's link to Google**
-1. Go to your **Supabase Dashboard** > **Authentication** > **URL Configuration**.
-2. Scroll down to **Callback (for OAuth)**. It looks like `https://[YOUR_PROJECT_ID].supabase.co/auth/v1/callback`. **Copy this link.**
-3. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a project.
-4. Navigate to **APIs & Services > Credentials** and click **Create Credentials -> OAuth client ID** (Web application).
-5. Under **Authorized redirect URIs**, click "Add URI" and **paste the link you copied from Supabase**.
-6. Save it to generate your **Client ID** and **Client Secret**.
-
-**Part 2: Give Google's keys to Supabase**
-1. Go back to your **Supabase Dashboard** > **Authentication** > **Providers**.
-2. Click on **Google** and toggle it **ON**.
-3. Paste the **Client ID** and **Client Secret** that Google just generated.
-4. Click Save.
-
-**Part 3: Tell Supabase about your Vercel Website**
-1. In **Supabase**, go back to **Authentication** > **URL Configuration**.
-2. Under **Site URL**, paste your main Vercel website link (e.g., `https://obsidian-elite.vercel.app`).
-3. Under **Redirect URLs**, click "Add URL", paste your Vercel link again, but add `/**` to the end of it (e.g., `https://obsidian-elite.vercel.app/**`).
+- **Public reads** go through `restGet`/`cachedRestGet`, which use the anon key
+  (RLS applies) with the Next.js Data Cache (`revalidate: 30s-1h`) and, when
+  configured, a shared Upstash layer for heavy semi-static data. Live scores are
+  never cached there.
+- **Writes** happen from the browser through Supabase with RLS; scores and stats
+  additionally go through the atomic `record_score()` / `record_stat()` RPCs so
+  concurrent taps can't lose updates.
+- **Cache invalidation** - every admin write calls `POST /api/revalidate`, which
+  expires the `public-data` tag and purges the shared keys, so published articles
+  and score changes appear immediately.
+- **Fonts** are self-hosted (Inter, subset, woff2, ~194 KB) with a system
+  fallback; no build-time font downloads.
+- **Monitoring** — Sentry captures 100% of unhandled errors at a 10% performance
+  sampling rate by default. Set `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
+  in your deploy env to enable source-map uploads (free, automatic on build).
+- **Realtime scaling** — The app uses direct Supabase Realtime WebSockets (free tier:
+  5 simultaneous connections per project). For high-concurrency deployments where
+  this limit is hit, switch to Upstash Redis Pub/Sub as the fan-out layer:
+  1. Create a Redis database at [upstash.com](https://upstash.com) ($5/mo for 1M ops/day).
+  2. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your env.
+  3. Set `UPSTASH_REALTIME_CHANNEL=obsidian-realtime`.
+  4. The edge handler at `/api/realtime-sub` streams changes via Server-Sent Events;
+     clients fall back to it automatically when the Supabase connection cap is reached.
+  See `.env.example` for the full variable list.

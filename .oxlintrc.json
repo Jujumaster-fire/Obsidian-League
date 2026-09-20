@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "no-console": "off",
+    // Matches eslint.config.mjs: data-loading effects intentionally await a
+    // query then set state, so this stays a warning rather than an error.
+    "react/set-state-in-effect": "warn",
+    // Not type-aware: false positives on packages that re-export types through
+    // conditional subpath exports (e.g. @sentry/nextjs). tsc covers this.
+    "import/namespace": "off",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-unused-vars": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "public/**",
+    "**/*.d.ts",
+    "scripts/**"
+  ]
+}
+

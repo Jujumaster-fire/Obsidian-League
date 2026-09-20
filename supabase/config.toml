@@ -1,0 +1,30 @@
+# Supabase project configuration for the CLI (`supabase link` / `supabase db push`).
+# Keep this file in version control: it tells the CLI that the SQL files under
+# `supabase/migrations/` are the source of truth for the schema.
+project_id = "obsidian-league"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[storage]
+enabled = true

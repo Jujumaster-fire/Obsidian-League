@@ -5,8 +5,13 @@ import { cookies } from 'next/headers'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  // if "next" is in param, use it as the redirect URL
-  const next = searchParams.get('next') ?? '/'
+  // if "next" is in param, use it as the redirect URL — validated here the
+  // same way as /login so OAuth callbacks never land on an arbitrary origin.
+  const rawNext = searchParams.get('next')
+  const next =
+    typeof rawNext === 'string' && rawNext.startsWith('/') && !rawNext.startsWith('//')
+      ? rawNext
+      : '/'
 
   if (code) {
     const cookieStore = await cookies()
