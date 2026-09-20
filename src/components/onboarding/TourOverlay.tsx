@@ -43,7 +43,9 @@ export function TourOverlay() {
 
   useEffect(() => {
     if (!isActive || !step) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect, react/set-state-in-effect -- clears the highlight ring when the tour stops or has no step
+      // Clears the highlight ring when the tour stops or has no step to point at.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      // oxlint-disable-next-line react/set-state-in-effect -- see above
       setRect(null)
       return
     }
