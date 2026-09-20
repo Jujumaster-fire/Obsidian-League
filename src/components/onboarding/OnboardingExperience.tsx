@@ -41,8 +41,8 @@ export function OnboardingExperience({ children }: { children: React.ReactNode }
   // Flags are read after mount so the server and client markup agree.
   useEffect(() => {
     // localStorage is only readable on the client, so the flag must be synced after mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     // oxlint-disable-next-line react/set-state-in-effect -- see above
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     setHasSeenWelcome(readFlag(WELCOME_SEEN_KEY))
   }, [])
 

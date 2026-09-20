@@ -17,7 +17,7 @@ interface SlugRow {
  * (fixtures are reachable from /competitions and /match/[id]).
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
   const now = new Date()
 
   const staticRoutes: MetadataRoute.Sitemap = [

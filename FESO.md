@@ -2,8 +2,12 @@
 
 Last updated after the server-render split for `/competitions` and `/match/[id]`,
 the African sports catalogue expansion (migration 10 + `update_match_clock`),
-and the mock/placeholder sweep. TypeScript is clean
-(`npx tsc --noEmit` → 0 errors) and the production build is verified.
+and the mock/placeholder sweep, then completed with the live-database push
+(migrations `00`–`13`) and the Vercel deploy. TypeScript is clean
+(`npx tsc --noEmit` → 0 errors), `eslint src/` → 0 errors / 0 warnings, and the
+production build is verified (`next build` → 25 routes, 0 errors). The app is
+live at `https://obsidian-league.vercel.app` — see `DEPLOY.md` §7 for moving to a
+purchased domain.
 
 ## Batch 1 - Role & navigation ✅ Done
 - `src/lib/admin-auth.ts` is the single server-side source of truth: `getAuthInfo()`
@@ -283,7 +287,7 @@ PART 09 dynamic loop — to prove the final state). Four real defects were fixed
 Regression tests were added to `tests/db-setup.contract.test.ts` (final-policy
 simulator, invite secrecy, duty scoping, storage locking, table ↔ RLS parity).
 
-Verification: `npx tsc --noEmit` → 0 errors · `npx vitest run` → **164 passed**
+Verification: `npx tsc --noEmit` → 0 errors · `npx vitest run` → **185 passed**
 (4 files) · `eslint` on every touched file → 0 errors.
 
 ---
@@ -293,11 +297,15 @@ Verification: `npx tsc --noEmit` → 0 errors · `npx vitest run` → **164 pass
 All ten FESO batches are implemented and verified:
 - `tsc --noEmit` → 0 errors
 - `next build` → 25 routes, 0 errors
-- `eslint src/` → 0 errors (onboarding components add 2 advisory
-  `react-hooks/set-state-in-effect` warnings)
+- `eslint src/` → 0 errors, 0 warnings
 - No `alert()` / `prompt()` / `window.confirm()` remain in `src/`
 - No `FOSO.md` references in source files
-- `npx vitest run` → 164 passed (duties · sports · onboarding · db-setup contract)
+- `npx vitest run` → 185 passed (duties · sports · onboarding · db-setup contract)
+- Supabase remote verified: migrations `00`–`13` applied (`npm run db:list`), 48 public
+  functions, every table RLS-enabled, no `is_admin()` policies, no anon grant on
+  `tournament_invites`, all 20 console RPCs present
+- Canonical URL is `https://obsidian-league.vercel.app`; swapping to the purchased
+  domain is a one-variable change — `DEPLOY.md` §7
 
 
 ### Production gaps resolved this pass
@@ -332,7 +340,10 @@ All ten FESO batches are implemented and verified:
    slightly on direct-link navigation. Fixable with a `IntersectionObserver` if
    needed.
 3. **`supabase/schema.sql` + `schema_updates.sql`** remain historical; migrations
-   01–11 are the source of truth (see `DEPLOY.md` §2).
+   00–13 are the source of truth (see `DEPLOY.md` §2).
+   `13_scope_duties_recorders_lineups.sql` now carries the scope-authority /
+   recorder / lineup surface that previously existed only in `db-setup.sql`, so
+   `db push` produces a console-ready database.
 
 ---
 
@@ -342,7 +353,7 @@ All ten FESO batches are implemented and verified:
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | `https://xxxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | `eyJhbGc...` |
-| `NEXT_PUBLIC_SITE_URL` | Canonical URL for sitemap/OAuth | `https://obsidianelite.com` |
+| `NEXT_PUBLIC_SITE_URL` | Canonical URL for metadata, sitemap, robots, OAuth | `https://obsidian-league.vercel.app` (swap to the custom domain — `DEPLOY.md` §7) |
 | `NEXT_PUBLIC_REGISTRATION_WHATSAPP` | Optional WhatsApp number | `2348012345678` |
 | `NEXT_PUBLIC_REGISTRATION_EMAIL` | Optional registration inbox | `entries@example.com` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Optional Sentry DSN | `https://...@sentry.io/...` |

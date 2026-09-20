@@ -26,7 +26,7 @@ Every tool below has a free tier sufficient for launch. All are linked via envir
   npm install -g supabase
   supabase login          # opens browser OAuth
   supabase link --project-ref <your-project-ref>
-  npm run db:push         # applies migrations 01...11 in order
+  npm run db:push         # applies migrations 00...13 in order
   ```
 - **Auth providers**: enabled under **Authentication → Providers**. Google requires a separate Google Cloud OAuth client (see §2 below). Email/password works out of the box.
 
@@ -53,7 +53,7 @@ Copy `.env.example` → `.env.local` for local work, and add the same keys in
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API | `https://<ref>.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API | public/anon key (RLS enforces access) |
-| `NEXT_PUBLIC_SITE_URL` | your domain | used for metadata, `sitemap.xml`, `robots.txt`, OAuth redirects. No trailing slash. |
+| `NEXT_PUBLIC_SITE_URL` | this deployment's public URL | used for metadata, `sitemap.xml`, `robots.txt`, OAuth redirects. No trailing slash. **Currently `https://obsidian-league.vercel.app`** — change it after connecting a custom domain (see §7). |
 
 ### Registration channels (home-page banner)
 
@@ -99,7 +99,7 @@ never cached in Redis. Every admin write purges the shared keys via
 
 **`supabase/db-setup.sql` is the source of truth** — one idempotent file containing
 the whole schema, seed data, RLS, realtime configuration and every write RPC.
-`supabase/migrations/00…11` hold the *same* schema split into ordered steps for the
+`supabase/migrations/00…13` hold the *same* schema split into ordered steps for the
 CLI. **Apply one of the two, not both** (doing both is harmless — every statement is
 re-runnable — but there is no reason to).
 
@@ -116,11 +116,11 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/db-setup.sql
 ```powershell
 npx supabase login                    # browser OAuth (or set SUPABASE_ACCESS_TOKEN)
 npx supabase link --project-ref <ref> # project ref from the dashboard URL
-npm run db:push                       # applies 00 … 11 in order
+npm run db:push                       # applies 00 … 13 in order
 npm run db:list                       # confirms what has been applied
 ```
 
-> `00_base_schema.sql` exists because migrations 01–11 all extend the base tables;
+> `00_base_schema.sql` exists because migrations 01–13 all extend the base tables;
 > without it a fresh project fails at `01_add_team_details.sql`. It mirrors PART 0
 > of `db-setup.sql`, so both routes converge on the same schema.
 
@@ -140,6 +140,8 @@ All migrations are idempotent (re-runnable). What each one does:
 | `09_harden_policies_and_admin_rpcs.sql` | finishes tightening, scale indexes, admin RPCs (`list_app_users`, `set_user_role`, `list_tournament_members`, `create_tournament_invite`, `revoke_tournament_invite`, `list_tournament_invites`) |
 | `10_african_sports_catalog_and_clock.sql` | expands the catalogue to 39 sports + per-sport `medals`/`clock` blocks, widens `match_events.event_type` CHECK, adds atomic `update_match_clock()` RPC |
 | `11_athlete_and_entry_rpcs.sql` | duty-checked athlete CRUD (`create_athlete`, `update_athlete`, `delete_athlete`) + fixture entry upsert (`upsert_fixture_entry`) for individual-sport results |
+| `12_harden_remaining_rls.sql` | finishes duty-scoped hardening of `tournament_posts` / `tournament_settings` writes and replaces the legacy `is_admin()` `logos` storage policies with `app_admin`-gated ones |
+| `13_scope_duties_recorders_lineups.sql` | the writer surface the live console drives: `has_tournament_duty()` / `can_write_fixture*()` authority, `fixture_loggers` scope claims (`claim_fixture_scope`, `heartbeat_fixture_scope`, `release_fixture_scope`), recorder RPCs (`set_fixture_stat`, `record_match_event`, `delete_match_event`, `set_fixture_rules`, `fixture_effective_rules`, `list_fixture_loggers`), per-match `court` rules and `fixture_lineups` (drag-editable formations) |
 
 > `supabase/schema.sql` and `supabase/schema_updates.sql` describe the original
 > single-role schema and are kept for history only - do **not** run them on a
@@ -153,6 +155,10 @@ select to_regprocedure('public.record_score(uuid,int,int)');             -- not 
 select to_regprocedure('public.update_match_clock(uuid,text,int,int,timestamptz)'); -- not null
 select to_regprocedure('public.list_app_users()');                       -- not null
 select to_regprocedure('public.create_tournament_invite(uuid,text[],timestamptz)'); -- not null
+select to_regprocedure('public.can_write_fixture(uuid,text,text)');      -- not null (scope authority)
+select to_regprocedure('public.claim_fixture_scope(uuid,text)');         -- not null (recorder claim)
+select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public';                                             -- 48
 select indexname from pg_indexes where tablename = 'fixtures';           -- idx_fixtures_status_match_date ...
 ```
 
@@ -196,8 +202,11 @@ on conflict (user_id) do update set role = 'app_admin';
 
 ### Auth configuration (Supabase dashboard)
 
-- **URL Configuration** → Site URL = production URL; Redirect URLs +=
-  `https://<domain>/**` (plus `http://localhost:3000/**` locally).
+- **URL Configuration** → **Site URL** = the app's public URL
+  (`https://obsidian-league.vercel.app` today, your custom domain after §7);
+  **Redirect URLs** += `https://<domain>/**` for **every** host the app answers on
+  (`https://obsidian-league.vercel.app/**`, `https://<your-domain>/**`, plus
+  `http://localhost:3000/**` for local dev).
 - **Providers → Google**: enable, paste the OAuth client id/secret (authorised
   redirect URI = `https://<ref>.supabase.co/auth/v1/callback`).
 - **Rate limits**: keep email/password sign-ins and resets tight.
@@ -330,5 +339,86 @@ Genuine placeholders to review before launch:
 
 - **App** - Vercel → Deployments → *Promote* the previous build.
 - **Cache** - `POST /api/revalidate` with an admin session purges both layers.
-- **Database** — migrations 01–11 are additive/idempotent; take a `pg_dump`
+- **Database** — migrations 00–13 are additive/idempotent; take a `pg_dump`
   before applying so a policy change can be reverted safely.
+
+---
+
+## 7. Switching to a custom domain (after purchase)
+
+The app is currently served from **`https://obsidian-league.vercel.app`** (the
+Vercel project URL). When the real domain is bought, the swap is deliberately
+centralised: **everything domain-dependent reads one variable**,
+`NEXT_PUBLIC_SITE_URL`, which is consumed in exactly three places.
+
+| File | What it drives |
+| --- | --- |
+| `src/app/layout.tsx` (`metadataBase`) | absolute URLs in metadata, OG/Twitter cards, canonical links |
+| `src/app/robots.ts` | the `Sitemap:` line + `Host:` |
+| `src/app/sitemap.ts` | every `<loc>` in `sitemap.xml` |
+
+`next.config.ts` needs **no change**: its image allowlist covers `*.supabase.co`
+plus Unsplash, and its CSP allows `connect-src https://*.supabase.co` — neither
+mentions the app's own domain. All three consumers use `||` fallbacks, so an
+**empty** value degrades to `http://localhost:3000` instead of crashing the build.
+
+### Step 1 — buy the domain and connect it to Vercel
+
+1. Buy the domain (any registrar), e.g. `obsidianelite.com`.
+2. Vercel → **Project → Settings → Domains → Add** → type the domain.
+3. Create the DNS records Vercel shows, at your registrar:
+   - apex (`example.com`) → Vercel's **A** record (or the **ALIAS/ANAME** value it suggests),
+   - `www` → **CNAME** `cname.vercel-dns.com`.
+4. Wait for **"Valid Configuration"** and the automatic **HTTPS certificate**
+   (usually a few minutes).
+5. Keep `obsidian-league.vercel.app` attached so existing links keep working.
+   Optionally set the custom domain as **primary** so Vercel 308-redirects the
+   `*.vercel.app` host to it.
+
+### Step 2 — tell the app about the new domain
+
+`NEXT_PUBLIC_SITE_URL` is **baked into the build** (`metadataBase`, `robots.txt`
+and `sitemap.xml` are prerendered), so changing it requires a **redeploy** —
+editing the Vercel env var alone changes nothing until a new build runs.
+
+| Where | Set to |
+| --- | --- |
+| **Vercel → Project → Settings → Environment Variables** (Production **and** Preview) | `https://obsidianelite.com` |
+| **GitHub → repo → Settings → Secrets and variables → Actions** → `NEXT_PUBLIC_SITE_URL` | `https://obsidianelite.com` (`.github/workflows/build.yml` feeds it to `next build`) |
+| `.env.example` (template) and local `.env.local` | `https://obsidianelite.com` — or keep `http://localhost:3000` for local-only dev |
+
+Then **redeploy**: Vercel → **Deployments** → *Redeploy*, and untick
+**"Use existing build cache"** so the new value is picked up.
+
+### Step 3 — Supabase (and Google)
+
+1. Supabase → **Authentication → URL Configuration**:
+   - **Site URL** = `https://obsidianelite.com`
+   - **Redirect URLs** += `https://obsidianelite.com/**` — keep
+     `http://localhost:3000/**` and `https://obsidian-league.vercel.app/**` too,
+     so in-flight password resets and invite links never break mid-switch.
+2. Supabase → **Authentication → Email Templates**: confirm the confirm/reset
+   links use `{{ .SiteURL }}` / `{{ .RedirectTo }}` (default) so they follow the
+   new domain automatically; otherwise hardcode
+   `https://obsidianelite.com/auth/callback`.
+3. **Google OAuth: no change needed.** Its authorised redirect URI is the
+   *Supabase* callback (`https://<ref>.supabase.co/auth/v1/callback`), which does
+   not move when the app's own domain changes. Only update the consent screen's
+   app name / support email if the brand changes.
+
+### Step 4 — verify, then you are done
+
+```powershell
+npm run smoke https://obsidianelite.com   # routes, headers, authz boundaries
+```
+
+- `https://obsidianelite.com/robots.txt` → `Sitemap: https://obsidianelite.com/sitemap.xml`
+- `https://obsidianelite.com/sitemap.xml` → every `<loc>` starts with the new domain
+- Sign in with **Google** and **email**, accept an invite link end-to-end, and
+  confirm a shared `/news/<slug>` link previews with the new domain.
+
+### Rolling back
+
+Point `NEXT_PUBLIC_SITE_URL` back to `https://obsidian-league.vercel.app` in
+Vercel + the GitHub secret and redeploy. The `*.vercel.app` host stays attached,
+so the site remains reachable at either address — the switch is non-destructive.
