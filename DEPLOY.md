@@ -55,6 +55,13 @@ Copy `.env.example` → `.env.local` for local work, and add the same keys in
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API | public/anon key (RLS enforces access) |
 | `NEXT_PUBLIC_SITE_URL` | this deployment's public URL | used for metadata, `sitemap.xml`, `robots.txt`, OAuth redirects. No trailing slash. **Currently `https://obsidian-league.vercel.app`** — change it after connecting a custom domain (see §7). |
 
+> **Set `NEXT_PUBLIC_SITE_URL` in two dashboards, not one:** **Vercel → Project →
+> Settings → Environment Variables** (Production *and* Preview) **and** **GitHub →
+> repo → Settings → Secrets and variables → Actions** (the CI workflow
+> `.github/workflows/build.yml` feeds it to `next build`). It is baked into the build,
+> so **redeploy** after changing it. An empty value no longer fails the build (it
+> falls back to `http://localhost:3000`) but must be set for correct canonical URLs.
+
 ### Registration channels (home-page banner)
 
 | Variable | Example | Notes |
@@ -274,7 +281,12 @@ fonts.googleapis.com).
 1. Vercel → **Add New → Project** → import the GitHub repo.
 2. Framework preset: **Next.js** (defaults `npm run build`).
 3. Add every environment variable from section 1.
-4. Deploy - `next.config.ts` applies the security headers (CSP, HSTS, ...) and
+4. Mirror the build-time vars into **GitHub → repo → Settings → Secrets and
+   variables → Actions** — the CI workflow (`.github/workflows/build.yml`) runs
+   `tsc`, oxlint, `vitest`, `eslint src/` and `next build`. The build reads
+   `NEXT_PUBLIC_SITE_URL` (canonical / `robots.txt` / `sitemap.xml`) and
+   `NEXT_PUBLIC_SUPABASE_URL` (image-allowlist host), so set those at minimum.
+5. Deploy - `next.config.ts` applies the security headers (CSP, HSTS, ...) and
    image allowlists automatically.
 
 ### Post-deploy verification

@@ -304,8 +304,13 @@ All ten FESO batches are implemented and verified:
 - Supabase remote verified: migrations `00`–`13` applied (`npm run db:list`), 48 public
   functions, every table RLS-enabled, no `is_admin()` policies, no anon grant on
   `tournament_invites`, all 20 console RPCs present
-- Canonical URL is `https://obsidian-league.vercel.app`; swapping to the purchased
-  domain is a one-variable change — `DEPLOY.md` §7
+- Canonical URL is `https://obsidian-league.vercel.app`.
+  **Action required in the dashboards (not in the repo):** set `NEXT_PUBLIC_SITE_URL`
+  to that URL in **Vercel → Project → Settings → Environment Variables**
+  (Production + Preview) **and** in **GitHub → repo → Settings → Secrets and
+  variables → Actions**, then **redeploy**. An empty value no longer breaks the
+  build (it falls back to `http://localhost:3000`) but must be set for correct
+  canonical / sitemap / OG URLs. Full procedure: `DEPLOY.md` §7.
 
 
 ### Production gaps resolved this pass
@@ -362,3 +367,12 @@ All ten FESO batches are implemented and verified:
 | `SENTRY_PROJECT` | Sentry project slug | `obsidian-elite` |
 | `UPSTASH_REDIS_REST_URL` | Optional shared cache + rate limit | — |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash token | — |
+
+> **Where to set them.** Vercel env vars are read at build **and** runtime; the CI
+> workflow `.github/workflows/build.yml` reads the same names from **GitHub → repo →
+> Settings → Secrets and variables → Actions**. `NEXT_PUBLIC_SITE_URL` must be set in
+> **both** places: it is baked into `metadataBase`, `robots.txt` and `sitemap.xml` at
+> build time, so a change only takes effect after a **redeploy** (Vercel →
+> Deployments → *Redeploy*, unticking "use existing build cache"). An empty value is
+> now harmless — the three consumers fall back to `http://localhost:3000` — but
+> leaving it empty points the sitemap / OG tags at `localhost`. See `DEPLOY.md` §7.
