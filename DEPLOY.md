@@ -281,11 +281,15 @@ fonts.googleapis.com).
 1. Vercel → **Add New → Project** → import the GitHub repo.
 2. Framework preset: **Next.js** (defaults `npm run build`).
 3. Add every environment variable from section 1.
-4. Mirror the build-time vars into **GitHub → repo → Settings → Secrets and
-   variables → Actions** — the CI workflow (`.github/workflows/build.yml`) runs
-   `tsc`, oxlint, `vitest`, `eslint src/` and `next build`. The build reads
-   `NEXT_PUBLIC_SITE_URL` (canonical / `robots.txt` / `sitemap.xml`) and
-   `NEXT_PUBLIC_SUPABASE_URL` (image-allowlist host), so set those at minimum.
+4. Optionally mirror the variables into **GitHub → repo → Settings → Secrets and
+   variables → Actions**. CI (`.github/workflows/build.yml`) runs `tsc`, oxlint,
+   `vitest`, `eslint src/` and `next build`, and **the build passes with no
+   secrets at all**: `NEXT_PUBLIC_SITE_URL` falls back to
+   `http://localhost:3000`, and the Supabase clients fall back to inert values
+   during prerender (`src/utils/supabase/env.ts`). The Supabase URL/key are
+   runtime-only, which is why they live in Vercel and not in CI. Setting
+   `NEXT_PUBLIC_SITE_URL` in CI is still worthwhile so prerendered `robots.txt`
+   / `sitemap.xml` carry the production domain.
 5. Deploy - `next.config.ts` applies the security headers (CSP, HSTS, ...) and
    image allowlists automatically.
 

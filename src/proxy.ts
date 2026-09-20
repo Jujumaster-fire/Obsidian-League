@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from './utils/supabase/env'
 
 /**
  * Next.js 16 Proxy (formerly Middleware).
@@ -26,10 +27,7 @@ function withRefreshedCookies(response: NextResponse, source: NextResponse): Nex
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -47,9 +45,17 @@ export async function proxy(request: NextRequest) {
 
   // IMPORTANT: `getUser()` revalidates against the Auth server; do not run
   // application logic between client creation and this call.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  //
+  // A network failure — or a missing Supabase env in local dev — must not take
+  // the whole site down, so degrade to "anonymous" and let the coarse gate
+  // below redirect `/admin/**` to /login. RLS stays authoritative.
+  let user: { id: string } | null = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user ? { id: data.user.id } : null
+  } catch {
+    user = null
+  }
 
   const { pathname, search } = request.nextUrl
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')

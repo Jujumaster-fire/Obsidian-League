@@ -310,7 +310,8 @@ All ten FESO batches are implemented and verified:
   (Production + Preview) **and** in **GitHub → repo → Settings → Secrets and
   variables → Actions**, then **redeploy**. An empty value no longer breaks the
   build (it falls back to `http://localhost:3000`) but must be set for correct
-  canonical / sitemap / OG URLs. Full procedure: `DEPLOY.md` §7.
+  canonical / sitemap / OG URLs. The Supabase URL/key are **not** needed by the
+  build — they are runtime-only and live in Vercel. Full procedure: `DEPLOY.md` §7.
 
 
 ### Production gaps resolved this pass
@@ -376,3 +377,7 @@ All ten FESO batches are implemented and verified:
 > Deployments → *Redeploy*, unticking "use existing build cache"). An empty value is
 > now harmless — the three consumers fall back to `http://localhost:3000` — but
 > leaving it empty points the sitemap / OG tags at `localhost`. See `DEPLOY.md` §7.
+>
+> The **build** needs none of these values: CI runs `next build` with no Supabase
+> secrets, because `src/utils/supabase/env.ts` supplies inert prerender-time
+> fallbacks. The real Supabase URL/key are only used at runtime (Vercel).
