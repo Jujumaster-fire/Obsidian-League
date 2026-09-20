@@ -17,7 +17,14 @@ import { OnboardingExperience } from '@/components/onboarding/OnboardingExperien
 const SYSTEM_FONT_CLASS = 'system-font-fallback'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  metadataBase: (() => {
+    const raw = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+    try {
+      return new URL(raw)
+    } catch {
+      return new URL(raw.startsWith("http") ? raw : `https://${raw}`)
+    }
+  })(),
   title: 'Obsidian Elite Tournament Manager',
   description: 'Manage tournaments and track live match stats.',
   icons: {
