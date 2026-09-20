@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next'
-import { withSentryConfig } from '@sentry/nextjs'
+// The subpath export is required: the top-level `@sentry/nextjs` re-export is
+// deprecated and stops working in Sentry v11.
+import { withSentryConfig } from '@sentry/nextjs/config'
 
 /**
  * Baseline security headers (FESO Batch 6).
@@ -85,5 +87,9 @@ export default withSentryConfig(nextConfig, {
   silent: !process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
   tunnelRoute: '/monitoring-tunnel',
-  autoInstrumentServerFunctions: true,
+  // Nested under `webpack` since the flat form is deprecated (and the
+  // instrumentation is a webpack feature — Turbopack builds skip it).
+  webpack: {
+    autoInstrumentServerFunctions: true,
+  },
 })
