@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS public.athletes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS tournament_id UUID;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT mixed;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS classification TEXT;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS team_id UUID;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS sport_id UUID;
+ALTER TABLE public.athletes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
 -- Backfill the gender CHECK if the table pre-existed without it.
 DO $$
 BEGIN
@@ -148,6 +156,18 @@ CREATE TABLE IF NOT EXISTS public.fixture_entries (
         CHECK (athlete_id IS NOT NULL OR team_id IS NOT NULL)
 );
 
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS fixture_id UUID;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS lane TEXT;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS athlete_id UUID;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS team_id UUID;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS result JSONB DEFAULT {}::jsonb;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS rank INTEGER;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS medal TEXT;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS recorded_by UUID;
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.fixture_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -215,6 +235,13 @@ CREATE TABLE IF NOT EXISTS public.players (
     jersey_number INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS tournament_id UUID;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS team_id UUID;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS position TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS jersey_number INTEGER;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 DO $$
 BEGIN
