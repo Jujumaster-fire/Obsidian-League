@@ -52,6 +52,18 @@ interface OverviewDraft {
   status: TournamentStatus
 }
 
+interface RegistrationDraft {
+  contact_whatsapp: string
+  contact_email: string
+  contact_preference: "whatsapp" | "email" | "both"
+  registration_open: boolean
+  registration_deadline: string
+  eligibility: string
+  team_size_limit: string
+  entry_fee: string
+  registration_rules: string
+}
+
 interface SettingsDraft {
   format: SettingsFormat
   table_arrangement: string
@@ -196,6 +208,18 @@ const EMPTY_OVERVIEW_DRAFT: OverviewDraft = {
   start_date: '',
   end_date: '',
   status: 'upcoming',
+}
+
+const EMPTY_REGISTRATION_DRAFT: RegistrationDraft = {
+  contact_whatsapp: "",
+  contact_email: "",
+  contact_preference: "both",
+  registration_open: false,
+  registration_deadline: "",
+  eligibility: "",
+  team_size_limit: "",
+  entry_fee: "",
+  registration_rules: "",
 }
 
 const EMPTY_SETTINGS_DRAFT: SettingsDraft = {
@@ -444,6 +468,7 @@ export default function TournamentWorkspacePage({
   const [tournament, setTournament] = useState<TournamentDetail | null>(null)
   const [overviewDraft, setOverviewDraft] = useState<OverviewDraft>(EMPTY_OVERVIEW_DRAFT)
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(EMPTY_SETTINGS_DRAFT)
+  const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft>(EMPTY_REGISTRATION_DRAFT)
   const [posts, setPosts] = useState<PostRow[]>([])
   const [postDraft, setPostDraft] = useState<PostDraft>(EMPTY_POST_DRAFT)
   const [slugEdited, setSlugEdited] = useState(false)
@@ -540,6 +565,20 @@ export default function TournamentWorkspacePage({
 
     ])
 
+    const settingsRowObj = settingsRes.data as { format?: SettingsFormat; table_arrangement?: string; rules?: string } | null
+    const tSettingsObj = (detail as unknown as { settings?: Record<string, unknown> }).settings || {}
+    setRegistrationDraft({
+      contact_whatsapp: String(tSettingsObj.contact_whatsapp || ""),
+      contact_email: String(tSettingsObj.contact_email || ""),
+      contact_preference: (tSettingsObj.contact_preference as "whatsapp" | "email" | "both") || "both",
+      registration_open: Boolean(tSettingsObj.registration_open),
+      registration_deadline: String(tSettingsObj.registration_deadline || ""),
+      eligibility: String(tSettingsObj.eligibility || ""),
+      team_size_limit: String(tSettingsObj.team_size_limit || ""),
+      entry_fee: String(tSettingsObj.entry_fee || ""),
+      registration_rules: String(tSettingsObj.registration_rules || ""),
+    })
+
     const settings = settingsRes.data as SettingsRow | null
     setSettingsDraft({
       format: (settings?.format as SettingsFormat) ?? 'league',
@@ -616,6 +655,42 @@ export default function TournamentWorkspacePage({
     }
 
     succeed('Tournament overview saved.')
+    await bustCache()
+    await loadAll()
+  }
+
+
+  const saveRegistration = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!tournament) return
+
+    setBusy(true)
+    const existingSettings = ((tournament as unknown as { settings?: Record<string, unknown> }).settings) || {}
+    const updatedSettings = {
+      ...existingSettings,
+      contact_whatsapp: orNull(registrationDraft.contact_whatsapp),
+      contact_email: orNull(registrationDraft.contact_email),
+      contact_preference: registrationDraft.contact_preference,
+      registration_open: registrationDraft.registration_open,
+      registration_deadline: orNull(registrationDraft.registration_deadline),
+      eligibility: orNull(registrationDraft.eligibility),
+      team_size_limit: orNull(registrationDraft.team_size_limit),
+      entry_fee: orNull(registrationDraft.entry_fee),
+      registration_rules: orNull(registrationDraft.registration_rules),
+    }
+
+    const { error: updateError } = await supabase
+      .from("tournaments")
+      .update({ settings: updatedSettings })
+      .eq("id", tournament.id)
+    setBusy(false)
+
+    if (updateError) {
+      fail("Could not save registration settings: " + updateError.message)
+      return
+    }
+
+    succeed("Registration settings saved.")
     await bustCache()
     await loadAll()
   }
@@ -1185,6 +1260,119 @@ return (
                 Save overview
               </button>
             </div>
+          </form>
+        </Section>
+
+
+        <Section
+          title="Tournament Registration & Contact Settings"
+          description="Configure channels, eligibility, rules, and deadlines shown on the pinned Newsroom announcement."
+        >
+          <form onSubmit={saveRegistration} className="space-y-4">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-white cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-white/20 bg-[#0f172a]"
+                  checked={registrationDraft.registration_open}
+                  disabled={busy}
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, registration_open: e.target.checked })}
+                />
+                Open for Registration (Pins Announcement in Newsroom)
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="Contact WhatsApp (e.g. 2348012345678)">
+                <input
+                  className={INPUT}
+                  value={registrationDraft.contact_whatsapp}
+                  disabled={busy}
+                  placeholder="2348012345678"
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, contact_whatsapp: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Contact Email">
+                <input
+                  type="email"
+                  className={INPUT}
+                  value={registrationDraft.contact_email}
+                  disabled={busy}
+                  placeholder="organisers@example.com"
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, contact_email: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Preferred Channel">
+                <select
+                  className={INPUT}
+                  value={registrationDraft.contact_preference}
+                  disabled={busy}
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, contact_preference: e.target.value as "whatsapp" | "email" | "both" })}
+                >
+                  <option value="both">WhatsApp & Email</option>
+                  <option value="whatsapp">WhatsApp Only</option>
+                  <option value="email">Email Only</option>
+                </select>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="Registration Deadline">
+                <input
+                  type="date"
+                  className={INPUT}
+                  value={registrationDraft.registration_deadline}
+                  disabled={busy}
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, registration_deadline: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Team Size Limit">
+                <input
+                  className={INPUT}
+                  value={registrationDraft.team_size_limit}
+                  disabled={busy}
+                  placeholder="e.g. 18-25 players"
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, team_size_limit: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Entry Fee (Optional)">
+                <input
+                  className={INPUT}
+                  value={registrationDraft.entry_fee}
+                  disabled={busy}
+                  placeholder="e.g. $500 or Discuss via contact"
+                  onChange={(e) => setRegistrationDraft({ ...registrationDraft, entry_fee: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <Field label="Eligibility Criteria">
+              <textarea
+                className={INPUT + " min-h-[70px]"}
+                value={registrationDraft.eligibility}
+                disabled={busy}
+                placeholder="e.g. Open to all registered clubs and university teams."
+                onChange={(e) => setRegistrationDraft({ ...registrationDraft, eligibility: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Registration Rules & Guidelines">
+              <textarea
+                className={INPUT + " min-h-[90px]"}
+                value={registrationDraft.registration_rules}
+                disabled={busy}
+                placeholder="e.g. Submissions require official squad roster and proof of identification."
+                onChange={(e) => setRegistrationDraft({ ...registrationDraft, registration_rules: e.target.value })}
+              />
+            </Field>
+
+            <button type="submit" className={PRIMARY} disabled={busy}>
+              Save Registration Settings
+            </button>
           </form>
         </Section>
 
