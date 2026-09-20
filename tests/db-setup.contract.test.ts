@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -83,9 +83,22 @@ describe('db-setup.sql — idempotency', () => {
     expect(count('CREATE OR REPLACE FUNCTION')).toBeGreaterThan(40)
   })
 
-  it('balances dollar-quoted function bodies', () => {
-    expect(count('$$') % 2).toBe(0)
-    expect(count('$fn$') % 2).toBe(0)
+  it('balances dollar-quoted blocks (tag-aware pairing)', () => {
+    // The naive `count('$$') % 2` check missed the real bug twice: migration 09
+    // shipped with BOTH a missing `$$;` after a DO block and a stray `$$;` at
+    // EOF, which cancelled each other out numerically. Delimiters must pair
+    // sequentially with matching tags instead.
+    const delimiters = (sql.match(/\$[A-Za-z_]*\$/g) ?? []).map((token) =>
+      token.slice(1, -1)
+    )
+    expect(delimiters.length % 2).toBe(0)
+
+    const stack: string[] = []
+    for (const tag of delimiters) {
+      if (stack.length > 0 && stack[stack.length - 1] === tag) stack.pop()
+      else stack.push(tag)
+    }
+    expect(stack, 'unclosed dollar-quoted block').toEqual([])
   })
 
   it('never drops a function (only replaces, or drops constraints/policies)', () => {
@@ -384,10 +397,29 @@ describe('db-setup.sql — hardening (invite secrecy, duty scoping, storage)', (
   })
 
   it('keeps invite tokens secret: no public SELECT policy and no anon grant', () => {
-    expect(sql).not.toContain('CREATE POLICY "Public can view valid invites"')
+    // The legacy public invite policy is created in migration 08 then removed by
+    // the migration 09 hardening loop, so its CREATE text legitimately remains in
+    // the file. Assert on the FINAL surviving set, not with not.toContain on the
+    // whole file (which also catches the still-present CREATE statement).
+    const inviteSurvivors = finalPolicies()
+            .filter((p) => p.table.endsWith('tournament_invites'))
+      .map((p) => p.name)
+    expect(inviteSurvivors).not.toContain('Public can view valid invites')
+    expect(inviteSurvivors).toEqual(
+      expect.arrayContaining([
+        'App admins can view invites',
+        'Tournament managers can view invites',
+      ]),
+    )
     expect(sql).toContain('DROP POLICY "Public can view valid invites" ON public.tournament_invites;')
-    expect(sql).toContain('REVOKE SELECT ON public.tournament_invites FROM anon, authenticated;')
-    expect(sql).not.toContain('GRANT SELECT ON public.tournament_invites TO anon')
+        expect(sql).toContain('REVOKE SELECT ON public.tournament_invites FROM anon;')
+    expect(sql).toContain('REVOKE SELECT ON public.tournament_invites FROM authenticated;')
+        // An early part grants SELECT to anon for the public invite policy; the mig 09
+    // hardening loop follows it with a matching REVOKE, so assert ordering rather
+    // than absence — the grant text legitimately remains in the single-shot file.
+    expect(sql).toContain('GRANT SELECT ON public.tournament_invites TO anon')
+    expect(sql.indexOf('REVOKE SELECT ON public.tournament_invites FROM anon;'))
+      .toBeGreaterThan(sql.indexOf('GRANT SELECT ON public.tournament_invites TO anon'))
   })
 
   it('scopes tournament_posts and tournament_settings writes by duty, not membership', () => {
@@ -403,8 +435,16 @@ describe('db-setup.sql — hardening (invite secrecy, duty scoping, storage)', (
   })
 
   it('locks the public logos bucket to app admins', () => {
-    expect(sql).not.toContain('bucket_id = \'logos\' AND public.is_admin()')
+    // The broad `bucket_id = 'logos' AND public.is_admin()` policy is created in
+    // an early storage part and dropped by the migration 09 hardening loop, so
+    // assert on the FINAL surviving set: legacy 'Admins can ... logos' must be
+    // gone and only 'App admins can ... logos' may remain.
+    const survivingLogos = finalPolicies()
+            .filter((p) => p.table.endsWith('objects'))
+      .map((p) => p.name)
     for (const action of ['insert', 'update', 'delete']) {
+      expect(survivingLogos).not.toContain(`Admins can ${action} logos`)
+      expect(survivingLogos).toContain(`App admins can ${action} logos`)
       expect(sql).toContain(`DROP POLICY "Admins can ${action} logos" ON storage.objects;`)
       expect(sql).toContain(`CREATE POLICY "App admins can ${action} logos"`)
       expect(sql).toContain("WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'")
@@ -498,4 +538,57 @@ describe('db-setup.sql — per-sport court config', () => {
     expect(body).toContain("('pitch', 'court', 'pool', 'track', 'none')")
     expect(body).toContain('Unsupported court shape')
   })
+})
+
+/**
+ * Regression guard for unterminated dollar-quoted blocks.
+ *
+ * Migration 09 shipped a `DO $$ … END` with the closing `$$;` missing, so the
+ * block swallowed the following `CREATE OR REPLACE FUNCTION … AS $$ BEGIN`.
+ * Postgres reported `syntax error at or near "BEGIN" (42601)` only at
+ * execution time, so nothing caught it until the first live `db push`.
+ *
+ * The signature is unmistakable: the text of a `DO` body can never contain a
+ * function definition. Matching each `DO $tag$ … $tag$;` non-greedily means an
+ * unterminated block runs on into the next definition and trips this assertion.
+ */
+describe('SQL dollar-quoting', () => {
+  const sqlFiles: string[] = [
+    join(root, 'supabase', 'db-setup.sql'),
+    ...readdirSync(join(root, 'supabase', 'migrations'))
+      .filter((name) => name.endsWith('.sql'))
+      .sort()
+      .map((name) => join(root, 'supabase', 'migrations', name)),
+  ]
+
+  const doBlocks = (source: string): string[] => {
+    const bodies: string[] = []
+    const pattern = /DO \$([A-Za-z_]*)\$([\s\S]*?)\$\1\$;/g
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(source)) !== null) bodies.push(match[2])
+    return bodies
+  }
+
+  for (const file of sqlFiles) {
+    const label = file.replace(`${root}\\`, '').replace(`${root}/`, '')
+
+    it(`${label}: every DO block is terminated`, () => {
+      const source = readFileSync(file, 'utf8')
+      const bodies = doBlocks(source)
+
+      // A file that declares `DO $…` must parse at least one block; a file with
+      // no DO blocks at all (pure ALTER/CREATE/INSERT migrations) is fine.
+      if (/DO \$/.test(source)) {
+        expect(bodies.length, `${label} declares DO but parsed no block`).toBeGreaterThan(0)
+      }
+
+      const swallowing = bodies.filter((body) =>
+        /CREATE OR REPLACE FUNCTION/.test(body)
+      )
+      expect(
+        swallowing.map((body) => body.slice(0, 80)),
+        `${label}: a DO block swallowed a function definition (missing \`$$;\`)`
+      ).toEqual([])
+    })
+  }
 })

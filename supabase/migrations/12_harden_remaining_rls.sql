@@ -70,7 +70,6 @@ BEGIN
         ) THEN
             DROP POLICY "Tournament members can delete tournament posts" ON public.tournament_posts;
         END IF;
-        END IF;
 
         -- Re-create as duty-scoped.
         IF NOT EXISTS (
@@ -156,7 +155,6 @@ BEGIN
           AND column_name = 'tournament_id'
     ) THEN
         RAISE NOTICE 'public.tournament_settings has no tournament_id column; skipping';
-    ELSE
     ELSE
         IF EXISTS (
             SELECT 1 FROM pg_policies
@@ -247,8 +245,6 @@ BEGIN
                 );
         END IF;
     END IF;
-END
-$$;
 END
 $$;
 

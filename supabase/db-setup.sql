@@ -1910,70 +1910,34 @@ BEGIN
             ON storage.objects FOR SELECT USING (bucket_id = 'logos');
     END IF;
 
-    IF EXISTS (
+    IF NOT EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'storage' AND tablename = 'objects'
           AND policyname = 'Admins can insert logos'
     ) THEN
-        DROP POLICY "Admins can insert logos" ON storage.objects;
+        CREATE POLICY "Admins can insert logos"
+            ON storage.objects FOR INSERT WITH CHECK (
+                bucket_id = 'logos' AND public.is_admin());
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'storage' AND tablename = 'objects'
-          AND policyname = 'App admins can insert logos'
-    ) THEN
-        CREATE POLICY "App admins can insert logos"
-            ON storage.objects FOR INSERT WITH CHECK (
-                bucket_id = 'logos'
-                AND EXISTS (
-                    SELECT 1 FROM public.user_roles ur
-                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
-                ));
-    END IF;
-
-    IF EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'storage' AND tablename = 'objects'
           AND policyname = 'Admins can update logos'
     ) THEN
-        DROP POLICY "Admins can update logos" ON storage.objects;
+        CREATE POLICY "Admins can update logos"
+            ON storage.objects FOR UPDATE USING (
+                bucket_id = 'logos' AND public.is_admin());
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'storage' AND tablename = 'objects'
-          AND policyname = 'App admins can update logos'
-    ) THEN
-        CREATE POLICY "App admins can update logos"
-            ON storage.objects FOR UPDATE USING (
-                bucket_id = 'logos'
-                AND EXISTS (
-                    SELECT 1 FROM public.user_roles ur
-                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
-                ));
-    END IF;
-
-    IF EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'storage' AND tablename = 'objects'
           AND policyname = 'Admins can delete logos'
     ) THEN
-        DROP POLICY "Admins can delete logos" ON storage.objects;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'storage' AND tablename = 'objects'
-          AND policyname = 'App admins can delete logos'
-    ) THEN
-        CREATE POLICY "App admins can delete logos"
+        CREATE POLICY "Admins can delete logos"
             ON storage.objects FOR DELETE USING (
-                bucket_id = 'logos'
-                AND EXISTS (
-                    SELECT 1 FROM public.user_roles ur
-                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
-                ));
+                bucket_id = 'logos' AND public.is_admin());
     END IF;
 END
 $$;
@@ -2282,15 +2246,14 @@ BEGIN
             );
     END IF;
 
-    -- SECURITY (hardening): never publish valid invites. The invite link
-    -- resolves through get_invite_info(); a public SELECT policy would only
-    -- leak live tokens to anon.
-    IF EXISTS (
+    IF NOT EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'public' AND tablename = 'tournament_invites'
           AND policyname = 'Public can view valid invites'
     ) THEN
-        DROP POLICY "Public can view valid invites" ON public.tournament_invites;
+        CREATE POLICY "Public can view valid invites"
+            ON public.tournament_invites FOR SELECT
+            USING (revoked = FALSE AND expires_at > NOW());
     END IF;
 
     IF NOT EXISTS (
@@ -2390,13 +2353,7 @@ BEGIN
 END
 $$;
 
--- SECURITY (hardening): invites are secrets. RLS filters rows, not columns, so
--- a public SELECT policy plus this grant would publish every live token to
--- anyone holding the anon key, and accept_tournament_invite() would then join
--- them to the tournament with the invite's duties (often '*'). The invite page
--- resolves links through get_invite_info() (SECURITY DEFINER), which needs no
--- table grant, and managers read invites through list_tournament_invites().
-REVOKE SELECT ON public.tournament_invites FROM anon, authenticated;
+GRANT SELECT ON public.tournament_invites TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.tournament_invites TO authenticated;
 
 -- Public invite-page reader: exposes only the safe subset, never
@@ -3322,14 +3279,6 @@ BEGIN
     ) THEN
         RAISE NOTICE 'public.tournament_posts has no tournament_id column; skipping member policies';
     ELSE
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-              AND policyname = 'Tournament members can insert tournament posts'
-        ) THEN
-            DROP POLICY "Tournament members can insert tournament posts" ON public.tournament_posts;
-        END IF;
-
         IF NOT EXISTS (
             SELECT 1 FROM pg_policies
             WHERE schemaname = 'public' AND tablename = 'tournament_posts'
@@ -3340,22 +3289,8 @@ BEGIN
                 WITH CHECK (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_posts.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
-        END IF;
-
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-              AND policyname = 'Tournament members can update tournament posts'
-        ) THEN
-            DROP POLICY "Tournament members can update tournament posts" ON public.tournament_posts;
         END IF;
 
         IF NOT EXISTS (
@@ -3368,33 +3303,13 @@ BEGIN
                 USING (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_posts.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 )
                 WITH CHECK (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_posts.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
-        END IF;
-
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-              AND policyname = 'Tournament members can delete tournament posts'
-        ) THEN
-            DROP POLICY "Tournament members can delete tournament posts" ON public.tournament_posts;
         END IF;
 
         IF NOT EXISTS (
@@ -3407,13 +3322,7 @@ BEGIN
                 USING (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_posts.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
         END IF;
     END IF;
@@ -3432,14 +3341,6 @@ BEGIN
     ) THEN
         RAISE NOTICE 'public.tournament_settings has no tournament_id column; skipping member policies';
     ELSE
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
-              AND policyname = 'Tournament members can insert tournament settings'
-        ) THEN
-            DROP POLICY "Tournament members can insert tournament settings" ON public.tournament_settings;
-        END IF;
-
         IF NOT EXISTS (
             SELECT 1 FROM pg_policies
             WHERE schemaname = 'public' AND tablename = 'tournament_settings'
@@ -3450,22 +3351,8 @@ BEGIN
                 WITH CHECK (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_settings.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
-        END IF;
-
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
-              AND policyname = 'Tournament members can update tournament settings'
-        ) THEN
-            DROP POLICY "Tournament members can update tournament settings" ON public.tournament_settings;
         END IF;
 
         IF NOT EXISTS (
@@ -3478,33 +3365,13 @@ BEGIN
                 USING (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_settings.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 )
                 WITH CHECK (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_settings.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
-        END IF;
-
-        IF EXISTS (
-            SELECT 1 FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
-              AND policyname = 'Tournament members can delete tournament settings'
-        ) THEN
-            DROP POLICY "Tournament members can delete tournament settings" ON public.tournament_settings;
         END IF;
 
         IF NOT EXISTS (
@@ -3517,13 +3384,7 @@ BEGIN
                 USING (
                     public.is_app_admin()
                     OR (tournament_id IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1
-                            FROM public.tournament_members m
-                            WHERE m.tournament_id = tournament_settings.tournament_id
-                              AND m.user_id = auth.uid()
-                              AND (m.duties @> ARRAY['*'])
-                        ))
+                        AND public.is_tournament_admin(tournament_id))
                 );
         END IF;
     END IF;
@@ -3803,14 +3664,6 @@ BEGIN
             USING (public.is_app_admin());
     END IF;
 
-    IF EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-          AND policyname = 'Tournament members can insert tournament posts'
-    ) THEN
-        DROP POLICY "Tournament members can insert tournament posts" ON public.tournament_posts;
-    END IF;
-
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies
         WHERE schemaname = 'public' AND tablename = 'tournament_posts'
@@ -3821,22 +3674,8 @@ BEGIN
             WITH CHECK (
                 public.is_app_admin()
                 OR (tournament_id IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1
-                        FROM public.tournament_members m
-                        WHERE m.tournament_id = tournament_posts.tournament_id
-                          AND m.user_id = auth.uid()
-                          AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                    ))
+                    AND public.is_tournament_admin(tournament_id))
             );
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-          AND policyname = 'Tournament members can update tournament posts'
-    ) THEN
-        DROP POLICY "Tournament members can update tournament posts" ON public.tournament_posts;
     END IF;
 
     IF NOT EXISTS (
@@ -3849,33 +3688,13 @@ BEGIN
             USING (
                 public.is_app_admin()
                 OR (tournament_id IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1
-                        FROM public.tournament_members m
-                        WHERE m.tournament_id = tournament_posts.tournament_id
-                          AND m.user_id = auth.uid()
-                          AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                    ))
+                    AND public.is_tournament_admin(tournament_id))
             )
             WITH CHECK (
                 public.is_app_admin()
                 OR (tournament_id IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1
-                        FROM public.tournament_members m
-                        WHERE m.tournament_id = tournament_posts.tournament_id
-                          AND m.user_id = auth.uid()
-                          AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                    ))
+                    AND public.is_tournament_admin(tournament_id))
             );
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'tournament_posts'
-          AND policyname = 'Tournament members can delete tournament posts'
-    ) THEN
-        DROP POLICY "Tournament members can delete tournament posts" ON public.tournament_posts;
     END IF;
 
     IF NOT EXISTS (
@@ -3888,13 +3707,7 @@ BEGIN
             USING (
                 public.is_app_admin()
                 OR (tournament_id IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1
-                        FROM public.tournament_members m
-                        WHERE m.tournament_id = tournament_posts.tournament_id
-                          AND m.user_id = auth.uid()
-                          AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
-                    ))
+                    AND public.is_tournament_admin(tournament_id))
             );
     END IF;
 END
@@ -4154,6 +3967,7 @@ BEGIN
             FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
     END IF;
 END
+$$;
 -- --------------------------------------------------------------------------
 -- 4. Admin RPCs (SECURITY DEFINER + explicit authorization checks)
 -- --------------------------------------------------------------------------
@@ -4369,7 +4183,6 @@ GRANT EXECUTE ON FUNCTION public.list_tournament_members(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_tournament_invite(UUID, TEXT[], TIMESTAMPTZ) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revoke_tournament_invite(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_tournament_invites(UUID) TO authenticated;
-$$;
 
 -- ============================================================================
 -- PART 10 — 10_african_sports_catalog_and_clock.sql
@@ -4955,9 +4768,348 @@ $$;
 GRANT EXECUTE ON FUNCTION public.upsert_fixture_entry(UUID, UUID, UUID, INTEGER, TEXT, JSONB, INTEGER, TEXT) TO authenticated;
 
 -- ============================================================================
--- PART 12 — futsal + data-driven rules (fixtures.rules_override)
+-- PART 12 — 12_harden_remaining_rls.sql
 -- ============================================================================
 
+-- ============================================================================
+-- Migration 12 — Harden remaining RLS policies (mirrors db-setup.sql)
+--
+-- Fixes three gaps the migration chain inherited from 05/06/08:
+--   H1 — 06 granted anon SELECT on tournament_invites + a public valid-only
+--        policy, leaking invite tokens. Revoke + drop.
+--   M1 — 08 gave any tournament_member write on tournament_posts via
+--        is_tournament_admin() with no duty check. Now requires 'posts'/'*'.
+--   M2 — 06 gave any tournament_member write on tournament_settings via
+--        is_tournament_admin(). Now requires '*' (full manager) or app_admin.
+--   M3 — 05 granted storage.objects logo writes through legacy is_admin().
+--        Now scoped to app_admin.
+--
+-- Idempotency: guarded by pg_policies existence checks. Re-running is a no-op.
+-- Depends on: 05 (storage), 06 (invites), 08 (tournament_posts).
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- --------------------------------------------------------------------------
+-- H1: tournament_invites token leak.
+-- --------------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'tournament_invites'
+          AND policyname = 'Public can view valid invites'
+    ) THEN
+        DROP POLICY "Public can view valid invites" ON public.tournament_invites;
+    END IF;
+END
+$$;
+
+REVOKE SELECT ON public.tournament_invites FROM anon;
+REVOKE SELECT ON public.tournament_invites FROM authenticated;
+
+-- --------------------------------------------------------------------------
+-- M1: tournament_posts writes — duty-scoped to 'posts' or '*' plus app_admin.
+-- --------------------------------------------------------------------------
+DO $$
+BEGIN
+    IF to_regclass('public.tournament_posts') IS NULL THEN
+        RAISE NOTICE 'public.tournament_posts does not exist; skipping';
+    ELSIF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'tournament_posts'
+          AND column_name = 'tournament_id'
+    ) THEN
+        RAISE NOTICE 'public.tournament_posts has no tournament_id column; skipping';
+    ELSE
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can insert tournament posts'
+        ) THEN
+            DROP POLICY "Tournament members can insert tournament posts" ON public.tournament_posts;
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can update tournament posts'
+        ) THEN
+            DROP POLICY "Tournament members can update tournament posts" ON public.tournament_posts;
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can delete tournament posts'
+        ) THEN
+            DROP POLICY "Tournament members can delete tournament posts" ON public.tournament_posts;
+        END IF;
+
+        -- Re-create as duty-scoped.
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can insert tournament posts'
+        ) THEN
+            CREATE POLICY "Tournament members can insert tournament posts"
+                ON public.tournament_posts FOR INSERT
+                WITH CHECK (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_posts.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
+                        ))
+                );
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can update tournament posts'
+        ) THEN
+            CREATE POLICY "Tournament members can update tournament posts"
+                ON public.tournament_posts FOR UPDATE
+                USING (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_posts.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
+                        ))
+                )
+                WITH CHECK (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_posts.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
+                        ))
+                );
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_posts'
+              AND policyname = 'Tournament members can delete tournament posts'
+        ) THEN
+            CREATE POLICY "Tournament members can delete tournament posts"
+                ON public.tournament_posts FOR DELETE
+                USING (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_posts.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'] OR m.duties @> ARRAY['posts'])
+                        ))
+                );
+        END IF;
+    END IF;
+END
+$$;
+
+-- --------------------------------------------------------------------------
+-- M2: tournament_settings writes — duty-scoped to '*' plus app_admin.
+-- --------------------------------------------------------------------------
+DO $$
+BEGIN
+    IF to_regclass('public.tournament_settings') IS NULL THEN
+        RAISE NOTICE 'public.tournament_settings does not exist; skipping';
+    ELSIF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'tournament_settings'
+          AND column_name = 'tournament_id'
+    ) THEN
+        RAISE NOTICE 'public.tournament_settings has no tournament_id column; skipping';
+    ELSE
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can insert tournament settings'
+        ) THEN
+            DROP POLICY "Tournament members can insert tournament settings" ON public.tournament_settings;
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can update tournament settings'
+        ) THEN
+            DROP POLICY "Tournament members can update tournament settings" ON public.tournament_settings;
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can delete tournament settings'
+        ) THEN
+            DROP POLICY "Tournament members can delete tournament settings" ON public.tournament_settings;
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can insert tournament settings'
+        ) THEN
+            CREATE POLICY "Tournament members can insert tournament settings"
+                ON public.tournament_settings FOR INSERT
+                WITH CHECK (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_settings.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'])
+                        ))
+                );
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can update tournament settings'
+        ) THEN
+            CREATE POLICY "Tournament members can update tournament settings"
+                ON public.tournament_settings FOR UPDATE
+                USING (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_settings.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'])
+                        ))
+                )
+                WITH CHECK (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_settings.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'])
+                        ))
+                );
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'tournament_settings'
+              AND policyname = 'Tournament members can delete tournament settings'
+        ) THEN
+            CREATE POLICY "Tournament members can delete tournament settings"
+                ON public.tournament_settings FOR DELETE
+                USING (
+                    public.is_app_admin()
+                    OR (tournament_id IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM public.tournament_members m
+                            WHERE m.tournament_id = tournament_settings.tournament_id
+                              AND m.user_id = auth.uid()
+                              AND (m.duties @> ARRAY['*'])
+                        ))
+                );
+        END IF;
+    END IF;
+END
+$$;
+
+-- --------------------------------------------------------------------------
+-- M3: storage.objects logos bucket — replace legacy is_admin() policies.
+-- --------------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'Admins can insert logos'
+    ) THEN
+        DROP POLICY "Admins can insert logos" ON storage.objects;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'App admins can insert logos'
+    ) THEN
+        CREATE POLICY "App admins can insert logos"
+            ON storage.objects FOR INSERT WITH CHECK (
+                bucket_id = 'logos'
+                AND EXISTS (
+                    SELECT 1 FROM public.user_roles ur
+                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
+                )
+            );
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'Admins can update logos'
+    ) THEN
+        DROP POLICY "Admins can update logos" ON storage.objects;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'App admins can update logos'
+    ) THEN
+        CREATE POLICY "App admins can update logos"
+            ON storage.objects FOR UPDATE USING (
+                bucket_id = 'logos'
+                AND EXISTS (
+                    SELECT 1 FROM public.user_roles ur
+                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
+                )
+            );
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'Admins can delete logos'
+    ) THEN
+        DROP POLICY "Admins can delete logos" ON storage.objects;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage' AND tablename = 'objects'
+          AND policyname = 'App admins can delete logos'
+    ) THEN
+        CREATE POLICY "App admins can delete logos"
+            ON storage.objects FOR DELETE USING (
+                bucket_id = 'logos'
+                AND EXISTS (
+                    SELECT 1 FROM public.user_roles ur
+                    WHERE ur.user_id = auth.uid() AND ur.role = 'app_admin'
+                )
+            );
+    END IF;
+END
+$$;
+
+-- ============================================================================
+-- PART 13 — 13_scope_duties_recorders_lineups.sql
+-- ============================================================================
+
+-- 13: scope authority, duty-checked recorder RPCs and fixture lineups.
+--
+-- Mirrors PARTs 12-15 of supabase/db-setup.sql. Without this migration the
+-- push path produces a database with no `has_tournament_duty()` /
+-- `can_write_fixture()` / `record_match_event()` / `claim_fixture_scope()` /
+-- `set_fixture_lineup()` / per-match rule surface, so the live console
+-- degrades on every fixture.
+--
+-- Generated from supabase/_parts/12..15: edit those parts, regenerate
+-- db-setup.sql, then mirror the change here (same rule as 00_base_schema.sql).
+-- Every statement is idempotent, so running it on a database that already
+-- has the surface (via db-setup.sql) is a no-op.
 -- ============================================================================
 -- PART 12 — Futsal + data-driven rules (editable clock, vocab, score label)
 -- ============================================================================
@@ -5207,10 +5359,6 @@ $fn$;
 
 GRANT EXECUTE ON FUNCTION public.fixture_stat_allowed(UUID, TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fixture_event_allowed(UUID, TEXT) TO anon, authenticated;
-
--- ============================================================================
--- PART 13 — scope authority, duties, fixture loggers
--- ============================================================================
 
 -- ============================================================================
 -- PART 13 — Authority model: scoped duties, per-fixture logger scopes
@@ -5768,10 +5916,6 @@ CREATE POLICY "Tournament members can delete fixtures"
 UPDATE public.tournament_members
 SET duties = ARRAY['*']
 WHERE duties IS NULL OR cardinality(duties) = 0;
-
--- ============================================================================
--- PART 14 — recorder RPCs (every live-console write path)
--- ============================================================================
 
 -- ============================================================================
 -- PART 14 — Recorder RPCs (everything the live console writes through)
@@ -7080,10 +7224,6 @@ $fn$;
 GRANT EXECUTE ON FUNCTION public.delete_athlete(UUID) TO authenticated;
 
 -- ============================================================================
--- PART 15 — fixture lineups (drag-editable formations)
--- ============================================================================
-
--- ============================================================================
 -- PART 15 — Fixture lineups (drag-editable formations, per-sport court)
 -- ============================================================================
 -- A lineup is the answer to "who starts, where, and in what role" for ONE
@@ -7366,6 +7506,14 @@ $fn$;
 
 GRANT EXECUTE ON FUNCTION public.set_fixture_lineup(UUID, UUID, INT, NUMERIC, NUMERIC, UUID, UUID, TEXT, BOOLEAN, BOOLEAN)
     TO authenticated;
+
+-- ============================================================================
+-- PART 12-15 — recorder surface
+-- ============================================================================
+
+-- ============================================================================
+-- (scope authority, recorder RPCs and fixture lineups) — sourced from migration 13_scope_duties_recorders_lineups.sql (mirror of _parts/12..15); see scripts/mk-parts-migration.mjs.
+-- ============================================================================
 
 -- ============================================================================
 -- END OF SETUP

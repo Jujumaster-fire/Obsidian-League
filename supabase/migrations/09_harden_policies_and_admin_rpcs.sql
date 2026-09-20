@@ -223,6 +223,7 @@ BEGIN
             FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
     END IF;
 END
+$$;
 -- --------------------------------------------------------------------------
 -- 4. Admin RPCs (SECURITY DEFINER + explicit authorization checks)
 -- --------------------------------------------------------------------------
@@ -438,4 +439,3 @@ GRANT EXECUTE ON FUNCTION public.list_tournament_members(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_tournament_invite(UUID, TEXT[], TIMESTAMPTZ) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revoke_tournament_invite(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_tournament_invites(UUID) TO authenticated;
-$$;

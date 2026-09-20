@@ -29,6 +29,8 @@ const MIGRATION_ORDER = [
   '09_harden_policies_and_admin_rpcs.sql',
   '10_african_sports_catalog_and_clock.sql',
   '11_athlete_and_entry_rpcs.sql',
+  '12_harden_remaining_rls.sql',
+  '13_scope_duties_recorders_lineups.sql',
 ]
 
 const banner = (label) =>
@@ -47,17 +49,11 @@ for (const file of MIGRATION_ORDER) {
   out += `\n${read(join(supabase, 'migrations', file))}\n`
 }
 
-out += banner('PART 12 — futsal + data-driven rules (fixtures.rules_override)')
-out += `\n${read(join(parts, '12_futsal_and_editable_rules.sql'))}\n`
+out += banner('PART 12-15 — recorder surface')
+out += banner('(scope authority, recorder RPCs and fixture lineups) — ' +
+  'sourced from migration 13_scope_duties_recorders_lineups.sql ' +
+  '(mirror of _parts/12..15); see scripts/mk-parts-migration.mjs.')
 
-out += banner('PART 13 — scope authority, duties, fixture loggers')
-out += `\n${read(join(parts, '13_scope_duties_and_loggers.sql'))}\n`
-
-out += banner('PART 14 — recorder RPCs (every live-console write path)')
-out += `\n${read(join(parts, '14_recorder_rpcs.sql'))}\n`
-
-out += banner('PART 15 — fixture lineups (drag-editable formations)')
-out += `\n${read(join(parts, '15_fixture_lineups.sql'))}\n`
 
 out += `
 -- ============================================================================
