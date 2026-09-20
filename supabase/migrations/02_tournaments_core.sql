@@ -69,6 +69,21 @@ CREATE TABLE IF NOT EXISTS public.tournaments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Ensure columns exist if table was created in an earlier schema iteration
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS edition TEXT;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS venue_city TEXT;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS end_date DATE;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT upcoming;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT {}::jsonb;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- Backfill the CHECK if the table pre-existed without it (e.g. created by an
 -- older, non-conforming DDL statement with the same table name).
 DO $$
