@@ -3,11 +3,7 @@ import Navigation from '@/components/Navigation'
 import { HomeInsights } from '@/components/HomeInsights'
 import { restGet } from '@/lib/public-api'
 import type { InsightPost } from '@/components/HomeInsights'
-import {
-  buildRegistrationMailto,
-  buildWhatsAppUrl,
-  type RegistrationTarget,
-} from '@/lib/registration'
+import { type RegistrationTarget } from '@/lib/registration'
 
 /** Live-ish home page: 30s freshness window. */
 export const revalidate = 30
@@ -120,14 +116,8 @@ const ConcludedMatchesSection = ({ matches }: { matches: MatchCardRow[] }) => (
  */
 const RegistrationBanner = ({ tournament }: { tournament: RegistrationTarget | null }) => {
   const target: RegistrationTarget = tournament ?? {}
-  const whatsappUrl = buildWhatsAppUrl(target)
-  const mailtoUrl = buildRegistrationMailto(target)
   const eventLabel =
-    [target.name, target.edition].filter(Boolean).join(' — ') || 'the next Obsidian Elite tournament'
-  const dateLine =
-    target.start_date || target.end_date
-      ? `${target.start_date ?? 'TBC'} → ${target.end_date ?? 'TBC'}`
-      : null
+    [target.name, target.edition].filter(Boolean).join(" — ") || "the next Obsidian Elite tournament"
 
   return (
     <section className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 rounded-2xl p-8 sm:p-12 text-center shadow-2xl relative overflow-hidden border border-indigo-500/30">
@@ -135,64 +125,22 @@ const RegistrationBanner = ({ tournament }: { tournament: RegistrationTarget | n
       <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl -ml-32 -mb-32"></div>
 
       <div className="relative z-10">
+        <span className="inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
+          Tournament Registrations
+        </span>
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-4 text-white tracking-tight">
           Ready to Prove Yourself?
         </h2>
-        <p className="text-indigo-200 mb-2 max-w-2xl mx-auto text-lg">
-          Register your team for {eventLabel} and compete for glory against the best in the league.
+        <p className="text-indigo-200 mb-6 max-w-2xl mx-auto text-lg">
+          Registration announcements, sports guidelines, and contact links for {eventLabel} are now pinned in the Newsroom.
         </p>
-        {(dateLine || target.venue_city) && (
-          <p className="text-indigo-300/80 text-sm mb-8">
-            {[dateLine, target.venue_city ? `Host city: ${target.venue_city}` : null]
-              .filter(Boolean)
-              .join(' • ')}
-          </p>
-        )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          {whatsappUrl && (
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-3 bg-[#25D366] text-[#0b3d20] font-bold py-3 px-8 rounded-full hover:bg-[#1ebe5b] transition-colors shadow-[0_0_30px_rgba(37,211,102,0.35)] transform hover:-translate-y-1"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.347-.347.52-.52.174-.174.232-.298.347-.497.115-.198.058-.372-.03-.52-.086-.148-.664-1.6-.91-2.19-.239-.577-.482-.5-.663-.508-.171-.008-.368-.01-.565-.01-.197 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347z" />
-                <path d="M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.334.101 11.892c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652a12.03 12.03 0 0 0 5.71 1.447h.006c6.585 0 11.946-5.335 11.949-11.893a11.82 11.82 0 0 0-3.48-8.453zM12.05 21.785h-.005a9.98 9.98 0 0 1-5.08-1.387l-.364-.216-3.759.98 1.005-3.653-.24-.377a9.83 9.83 0 0 1-1.51-5.24c.002-5.45 4.455-9.884 9.938-9.884a9.86 9.86 0 0 1 7.017 2.9 9.79 9.79 0 0 1 2.91 6.99c-.003 5.45-4.456 9.887-9.912 9.887z" />
-              </svg>
-              Register on WhatsApp
-            </a>
-          )}
-
-          {mailtoUrl && (
-            <a
-              href={mailtoUrl}
-              className="inline-flex items-center gap-3 bg-white text-indigo-900 font-bold py-3 px-8 rounded-full hover:bg-indigo-50 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.3)] transform hover:-translate-y-1"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Email the organisers
-            </a>
-          )}
-
-          {!whatsappUrl && !mailtoUrl && (
-            <Link
-              href="/news"
-              className="inline-block bg-white text-indigo-900 font-bold py-3 px-8 rounded-full hover:bg-indigo-50 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.3)] transform hover:-translate-y-1"
-            >
-              Registration updates in the newsroom
-            </Link>
-          )}
-        </div>
-
-        {(whatsappUrl || mailtoUrl) && (
-          <p className="mt-6 text-xs text-indigo-200/80">
-            Your message is pre-filled with the details we need — just add your team information and
-            send.
-          </p>
-        )}
+        <Link
+          href="/news"
+          className="inline-flex items-center gap-3 bg-white text-indigo-900 font-bold py-3.5 px-8 rounded-full hover:bg-indigo-50 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)] transform hover:-translate-y-0.5"
+        >
+          View Registrations in Newsroom →
+        </Link>
       </div>
     </section>
   )
