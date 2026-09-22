@@ -565,7 +565,6 @@ export default function TournamentWorkspacePage({
 
     ])
 
-    const settingsRowObj = settingsRes.data as { format?: SettingsFormat; table_arrangement?: string; rules?: string } | null
     const tSettingsObj = (detail as unknown as { settings?: Record<string, unknown> }).settings || {}
     setRegistrationDraft({
       contact_whatsapp: String(tSettingsObj.contact_whatsapp || ""),

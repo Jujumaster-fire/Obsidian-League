@@ -3,11 +3,7 @@ import Navigation from '@/components/Navigation'
 import { HomeInsights } from '@/components/HomeInsights'
 import { restGet } from '@/lib/public-api'
 import type { InsightPost } from '@/components/HomeInsights'
-import {
-  buildRegistrationMailto,
-  buildWhatsAppUrl,
-  type RegistrationTarget,
-} from '@/lib/registration'
+import { type RegistrationTarget } from '@/lib/registration'
 
 /** Live-ish home page: 30s freshness window. */
 export const revalidate = 30
