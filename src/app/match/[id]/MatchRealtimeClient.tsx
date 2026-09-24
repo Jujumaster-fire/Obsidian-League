@@ -1,3 +1,4 @@
+import { getEffectiveMinute } from "@/lib/match-clock"
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -220,7 +221,7 @@ function OverviewPanel({ fixture, events, isLive }: { fixture: MatchFixtureShape
         </p>
         {isLive && (
           <p className="mt-2 text-red-400 font-semibold animate-pulse">
-            Minute {fixture.current_minute ?? 0}&apos;
+            Minute {getEffectiveMinute(fixture)}&apos;
           </p>
         )}
       </div>
