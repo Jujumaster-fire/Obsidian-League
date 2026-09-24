@@ -1,3 +1,4 @@
+import { HomeRealtimeMatches } from "@/components/HomeRealtimeMatches"
 import Link from 'next/link'
 import Navigation from '@/components/Navigation'
 import { HomeInsights } from '@/components/HomeInsights'
@@ -81,16 +82,6 @@ const renderMatchList = (matches: MatchCardRow[], emptyMessage: string) => {
       </div>
   )
 }
-
-const MatchesOfTheDaySection = ({ matches }: { matches: MatchCardRow[] }) => (
-  <section>
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-          Matches of the Day
-      </h2>
-      {renderMatchList(matches, "No matches scheduled for today.")}
-  </section>
-)
 
 const UpcomingFixturesSection = ({ matches }: { matches: MatchCardRow[] }) => (
   <section>
@@ -221,7 +212,7 @@ export default async function Home() {
           {hasMatches ? (
              <>
                 <div data-tour="home-matchday">
-                  <MatchesOfTheDaySection matches={matchesOfTheDay} />
+                  <HomeRealtimeMatches initialMatches={matchesOfTheDay} />
                 </div>
                 <div data-tour="home-insights">
                   <HomeInsights posts={postsData} />
