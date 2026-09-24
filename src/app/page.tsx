@@ -83,16 +83,6 @@ const renderMatchList = (matches: MatchCardRow[], emptyMessage: string) => {
   )
 }
 
-const MatchesOfTheDaySection = ({ matches }: { matches: MatchCardRow[] }) => (
-  <section>
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-          Matches of the Day
-      </h2>
-      {renderMatchList(matches, "No matches scheduled for today.")}
-  </section>
-)
-
 const UpcomingFixturesSection = ({ matches }: { matches: MatchCardRow[] }) => (
   <section>
       <h2 className="text-2xl font-bold mb-6">Upcoming Fixtures</h2>
