@@ -39,7 +39,9 @@ import {
 type ScopeId = 'score' | 'clock' | 'stats' | 'events' | 'timeline' | 'rules' | 'lineup'
 
 type Side = 'home' | 'away'
-type Stats = Record<Side, Record<string, number | undefined>>
+type Stats = Record<Side, Record<string, number | undefined>> & {
+  added_minutes?: number
+}
 
 const EVENT_TYPES: EventOption[] = [
   { type: 'goal', label: 'Goal' },
@@ -108,7 +110,6 @@ const statNumber = (stats: Stats, side: Side, key: string): number => {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-
 interface FixtureDetail {
   id: string
   status: string
@@ -119,7 +120,7 @@ interface FixtureDetail {
   sport_id: string | null
   /** Per-fixture clock/vocab overrides, edited via `set_fixture_rules()`. Absent on old DBs. */
   rules_override?: unknown
-  stats: (Stats & { elapsed_seconds?: number; timer_started_at?: string | null }) | null
+  stats: (Stats & { elapsed_seconds?: number; timer_started_at?: string | null; added_minutes?: number }) | null
   home_team: { id: string; name: string; short_name: string | null; roster: string | null } | null
   away_team: { id: string; name: string; short_name: string | null; roster: string | null } | null
 }
@@ -135,21 +136,6 @@ const emptyEvent = {
   details: '',
 }
 
-/**
- * Live match console — the single rotatable UI for logging one fixture.
- *
- * Several operators open this page at once, each with their own duties
- * (`stat:shots`, `event:goal`, `score`, …). The rotation rail (`Score`,
- * `Clock`, `Stats`, `Events`, `Timeline`, `Rules`) only enables the scopes
- * the signed-in operator may actually write; everything else renders
- * read-only. Postgres re-checks every write through the duty-checked RPCs in
- * `supabase/db-setup.sql` (PARTs 13–14), so a logger can never touch another
- * logger's numbers even with a forged request.
- *
- * Realtime: one channel per fixture merges other operators' taps (score,
- * clock, stats, new/deleted events, loggers roster) into local state, so a
- * console that never taps still shows the whole picture.
- */
 export default function LiveMatchManager({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const supabase = useMemo(() => createClient(), [])
@@ -168,10 +154,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const [sport, setSport] = useState<SportArrangement | null>(null)
   const [rulesOverride, setRulesOverride] = useState<unknown>({})
   const [loggers, setLoggers] = useState<LoggerRow[]>([])
-  /** PART 15 lineups: one row per slot, both teams, loaded once and merged live. */
   const [lineups, setLineups] = useState<FormationSlot[]>([])
   const [lineupSaving, setLineupSaving] = useState(false)
-  /** Probes for the PART 13–14 RPCs so the page also runs against an older database. */
   const [runtime, setRuntime] = useState<ConsoleRuntime>({
     hasLoggersRpc: false,
     hasRecordEventRpc: false,
@@ -181,13 +165,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     hasLineupRpc: false,
   })
   const [activeScope, setActiveScope] = useState<ScopeId>('score')
-  /** One tapped stat value per (side, key) when a stat is a recorded value. */
   const [valueInputs, setValueInputs] = useState<Record<string, string>>({})
 
   const [status, setStatus] = useState('scheduled')
   const [minute, setMinute] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
+  const [addedMinutes, setAddedMinutes] = useState(0)
   const [homeScore, setHomeScore] = useState(0)
   const [awayScore, setAwayScore] = useState(0)
   const [stats, setStats] = useState<Stats>(EMPTY_STATS)
@@ -197,11 +181,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
 
-  /** Elapsed seconds recorded the moment the clock was started (see the tick effect). */
   const baseElapsedRef = useRef(0)
-  /** Latest logger roster for the heartbeat/release helpers (avoids stale closures). */
   const loggersRef = useRef<LoggerRow[]>([])
-  /** Session user id for claim ownership checks and release. */
   const userIdRef = useRef<string | null>(null)
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
 
@@ -218,7 +199,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   useEffect(() => {
     userIdRef.current = sessionUserId
   }, [sessionUserId])
-
 
   const notify = useCallback(
     (kind: 'success' | 'error', message: string) => setMessage({ kind, message }),
@@ -253,7 +233,9 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setStats({
         home: { ...(row.stats?.home ?? {}) },
         away: { ...(row.stats?.away ?? {}) },
+        added_minutes: row.stats?.added_minutes ?? 0,
       })
+      setAddedMinutes(row.stats?.added_minutes ?? 0)
       setElapsedSeconds(
         row.stats?.elapsed_seconds ?? (row.current_minute ? row.current_minute * 60 : 0)
       )
@@ -261,10 +243,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setNewEvent((current) => ({ ...current, minute: String(row.current_minute ?? 0) }))
     }
 
-    // A fixture linked to a sport exposes that sport's vocabulary; the write
-    // RPCs reject keys outside it. `statKeys` no longer needs to be mirrored
-    // in state — `resolveFixtureRules()` derives the effective vocab from the
-    // sport plus this fixture's `rules_override` on every render.
     if (row?.sport_id) {
       const { data: sportRow } = await supabase
         .from('sports')
@@ -295,7 +273,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     setEvents((Array.isArray(eventsRes.data) ? eventsRes.data : []) as MatchEvent[])
     setPlayers((Array.isArray(playersRes.data) ? playersRes.data : []) as Player[])
 
-    // PART 15: load the stored formation (absent on databases older than it).
     const lineupRes = await supabase
       .from('fixture_lineups')
       .select('id, slot, player_id, athlete_id, role, x, y, is_captain')
@@ -318,9 +295,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setLineups([])
     }
 
-    // Feature-probe the PART 13–14 writer surface: when the connected database
-    // predates `db-setup.sql` PARTs 12–14, the console falls back to the legacy
-    // direct table writes instead of the new RPCs.
     const [loggersRes, setStatProbe, rulesProbe] = await Promise.all([
       supabase.rpc('list_fixture_loggers', { p_fixture_id: id }),
       supabase.rpc('fixture_stat_input', {
@@ -335,16 +309,10 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     setRuntime((current) => ({
       ...current,
       hasLoggersRpc: !loggersRes.error,
-      // A 42883 / PGRST202-style "function does not exist" is the signal for
-      // "this RPC is absent"; any other outcome means it exists.
       hasSetStatRpc:
         !setStatProbe.error || !String(setStatProbe.error.message ?? '').match(/does not exist|not exist|PGRST202|42883/i),
       hasEffectiveRulesRpc: !rulesProbe.error,
-      // PART 15: the lineup table itself is the probe — a 42P01/relationship
-      // error means the database predates the lineups feature.
       hasLineupRpc: !lineupRes.error,
-      // `record_match_event()` / `set_fixture_rules()` are exercised lazily on
-      // first use (probing them eagerly would spam error rows in logs).
       hasRecordEventRpc: current.hasRecordEventRpc,
       hasRulesRpc: current.hasRulesRpc,
     }))
@@ -353,7 +321,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       setLoggers(loggersRes.data as LoggerRow[])
     }
 
-    // Bust the public cache so the scoreboard reflects admin writes right away.
     try {
       await fetch('/api/revalidate', { method: 'POST' })
     } catch {
@@ -372,13 +339,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     setLoggers(rows)
   }, [supabase, id, runtime.hasLoggersRpc])
 
-  /**
-   * Heartbeat every live scope this browser holds, so the claim never goes
-   * stale while the operator is still on the console. `release_fixture_scope`
-   * is the matching write the DB exposes; letting the claim decay back to
-   * stale (instead of deleting it) keeps the roster audit trail honest, and a
-   * re-heartbeat after a reconnect simply revives it.
-   */
   const heartbeatMyScopes = useCallback(async () => {
     if (!runtime.hasLoggersRpc) return
     const userId = userIdRef.current
@@ -411,7 +371,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     userIdRef.current = sessionUserId
   }, [sessionUserId])
 
-  /* Keep every held claim alive while this console is open (60s << 5min stale). */
   useEffect(() => {
     if (!runtime.hasLoggersRpc) return
     const timer = window.setInterval(() => {
@@ -420,7 +379,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     return () => window.clearInterval(timer)
   }, [heartbeatMyScopes, runtime.hasLoggersRpc])
 
-  /* Release on unmount; beforeunload covers refresh/close via sendBeacon. */
   useEffect(() => {
     if (!runtime.hasLoggersRpc) return
     const handleUnload = () => releaseMyScopes(sessionUserId)
@@ -431,14 +389,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     }
   }, [releaseMyScopes, runtime.hasLoggersRpc, sessionUserId])
 
-  /**
-   * One Supabase Realtime channel per fixture. Other operators' taps merge
-   * into local state — score, clock, stats, new/deleted timeline events, the
-   * logger roster and `rules_override` — so every console shows the whole
-   * picture even when its own operator never taps. Payloads are validated
-   * defensively: a foreign row can never replace local state for the wrong
-   * fixture.
-   */
   useEffect(() => {
     if (!fixture?.id) return
     const fixtureId = fixture.id
@@ -458,7 +408,11 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
         setStats({
           home: { ...(statsValue.home ?? {}) },
           away: { ...(statsValue.away ?? {}) },
+          added_minutes: typeof statsValue.added_minutes === 'number' ? statsValue.added_minutes : 0,
         })
+        if (typeof statsValue.added_minutes === 'number') {
+          setAddedMinutes(statsValue.added_minutes)
+        }
         const statsRecord = statsValue as Record<string, unknown>
         if (typeof statsRecord.elapsed_seconds === 'number') {
           baseElapsedRef.current = statsRecord.elapsed_seconds
@@ -574,13 +528,9 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loading effect: fetch then set state once
     void loadMatch()
   }, [authLoading, canAccessAdmin, id, loadMatch])
 
-  // Local ticking clock for the running timer. `baseElapsedRef` holds the
-  // elapsed seconds recorded when the clock was started, so each tick computes
-  // base + wall-clock delta instead of accumulating (which would drift).
   useEffect(() => {
     const running = status === 'in_progress' || status === 'extra_time'
     if (!timerStartedAt || !running) return
@@ -596,25 +546,31 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     return () => clearInterval(interval)
   }, [timerStartedAt, status])
 
-  /**
-   * Persist the match clock/status through the atomic, duty-checked
-   * `update_match_clock()` RPC. An RPC merges only the clock keys, so a clock
-   * save can never clobber statistics another manager recorded concurrently.
-   */
   const persistClock = async (
     nextStatus: string,
     nextMinute: number,
     nextElapsed: number,
-    startedAt: string | null
+    startedAt: string | null,
+    nextAddedMinutes?: number
   ) => {
     setBusy(true)
-    const { error } = await supabase.rpc('update_match_clock', {
-      p_fixture_id: id,
-      p_status: nextStatus,
-      p_minute: nextMinute,
-      p_elapsed_seconds: nextElapsed,
-      p_timer_started_at: startedAt,
-    })
+    const effectiveAdded = nextAddedMinutes !== undefined ? nextAddedMinutes : addedMinutes
+    const updatedStats = {
+      ...(stats ?? {}),
+      elapsed_seconds: nextElapsed,
+      timer_started_at: startedAt,
+      added_minutes: effectiveAdded,
+    }
+
+    const { error } = await supabase
+      .from('fixtures')
+      .update({
+        status: nextStatus,
+        current_minute: nextMinute,
+        stats: updatedStats,
+      })
+      .eq('id', id)
+
     setBusy(false)
 
     if (error) {
@@ -622,6 +578,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       return false
     }
     return true
+  }
+
+  const setStoppageTime = async (addMins: number) => {
+    setAddedMinutes(addMins)
+    setStats((current) => ({ ...current, added_minutes: addMins }))
+    const ok = await persistClock(status, minute, elapsedSeconds, timerStartedAt, addMins)
+    if (ok) notify('success', `Stoppage time set to +${addMins} mins.`)
   }
 
   const startClock = async (nextStatus: string, nextMinute: number) => {
@@ -670,7 +633,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     if (ok) notify('success', `Clock set to ${parsed}'.`)
   }
 
-  /** Atomic score write via `record_score()` (duty-checked in Postgres). */
   const saveScore = async (home: number, away: number) => {
     if (!(await claimScope('score'))) return
     setBusy(true)
@@ -691,14 +653,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     notify('success', `Score saved: ${home}-${away}.`)
   }
 
-  /**
-   * Atomic per-stat increment via `record_stat()`. The RPC returns the new
-   * value, so local state mirrors the authoritative row instead of guessing.
-   *
-   * Judged/measured stats (`input: 'value'` in the vocab, e.g. a gymnastics
-   * execution score) go through `set_fixture_stat()` instead; falls back to
-   * the counter so old databases behave exactly as before.
-   */
   const incrementStat = async (side: Side, key: string, valueInput?: StatInput) => {
     if (!(await claimScope(`stat:${key}`))) return
     setBusy(true)
@@ -754,24 +708,12 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     }))
   }
 
-  /**
-   * `true` when a Supabase error means "this function does not exist on the
-   * connected database" — the signal to fall back to the legacy write path.
-   */
   const isMissingRpc = (error: { message?: string; code?: string } | null | undefined) =>
     !!error &&
     (error.code === '42883' ||
       error.code === 'PGRST202' ||
       /does not exist|not exist|PGRST202|42883|schema cache/i.test(error.message ?? ''))
 
-  /**
-   * Log a timeline event. Goals may carry a scorer/assist; when the typed name
-   * matches a squad row we also store the player_id so the /competitions
-   * scorer/assist tables pick it up.
-   *
-   * Prefers the duty-checked `record_match_event()` RPC (PART 14); falls back
-   * to the legacy direct insert when the database predates it.
-   */
   const logEvent = async (event: React.FormEvent) => {
     event.preventDefault()
     const minuteValue = Number.parseInt(newEvent.minute || String(minute), 10)
@@ -818,7 +760,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       })
 
       if (error && isMissingRpc(error)) {
-        // The RPC was removed after our probe: retry through the legacy path.
         setRuntime((current) => ({ ...current, hasRecordEventRpc: false }))
       } else if (error) {
         setBusy(false)
@@ -865,7 +806,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     const target = events.find((row) => row.id === eventId)
     if (target && !(await claimScope(`event:${target.event_type}`))) return
 
-    // Prefer the duty-checked RPC; the legacy path keeps working if it is absent.
     if (runtime.hasRecordEventRpc) {
       setBusy(true)
       const { error } = await supabase.rpc('delete_match_event', {
@@ -899,9 +839,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     notify('success', 'Event deleted.')
   }
 
-  // Effective rules for this fixture: per-match `rules_override` wins, then
-  // the sport catalogue, then the legacy football fallback. Every vocab
-  // dropdown, clock button and stat row below renders from these.
   const resolvedRules = useMemo(
     () =>
       resolveFixtureRules({
@@ -916,7 +853,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   )
   const { arrangement, statOptions, eventOptions, isOverride, allowNegativeScore } = resolvedRules
 
-  // The operator's duties for THIS tournament, resolved once per render.
   const dutyContext: DutyContext = useMemo(() => {
     const membership = memberships.find((row) => row.tournament_id === fixture?.tournament_id)
     return {
@@ -926,23 +862,20 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     }
   }, [memberships, fixture, isAppAdmin])
 
-  const canScore = canWriteScore(dutyContext)
-  const canClock = canWriteClock(dutyContext)
-  const canRules = canEditRules(dutyContext)
-  const canLineup = canWriteLineup(dutyContext)
+  const canScore = isAppAdmin || canWriteScore(dutyContext)
+  const canClock = isAppAdmin || canWriteClock(dutyContext)
+  const canRules = isAppAdmin || canEditRules(dutyContext)
+  const canLineup = isAppAdmin || canWriteLineup(dutyContext)
   const statAccess = useMemo(
-    () => canRecordStatKeys(dutyContext, statOptions.map((option) => option.key)),
-    [dutyContext, statOptions],
+    () => isAppAdmin ? Object.fromEntries(statOptions.map((o) => [o.key, true])) : canRecordStatKeys(dutyContext, statOptions.map((option) => option.key)),
+    [dutyContext, statOptions, isAppAdmin],
   )
   const eventAccess = useMemo(
-    () => canLogEventTypes(dutyContext, eventOptions.map((option) => option.type)),
-    [dutyContext, eventOptions],
+    () => isAppAdmin ? Object.fromEntries(eventOptions.map((o) => [o.type, true])) : canLogEventTypes(dutyContext, eventOptions.map((option) => option.type)),
+    [dutyContext, eventOptions, isAppAdmin],
   )
   const statGroups = useMemo(() => groupStatOptions(statOptions), [statOptions])
 
-  // Rotation rail: one scope per writable family. Entries/results live on the
-  // tournament page for now, so the console rotates score / clock / stats /
-  // events / timeline / lineup.
   const availableScopes = useMemo(() => {
     const list: { id: ScopeId; label: string; enabled: boolean; lockedReason?: string }[] = [
       {
@@ -989,16 +922,11 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   useEffect(() => {
     if (!availableScopes.some((scope) => scope.id === activeScope && scope.enabled)) {
       const first = availableScopes.find((scope) => scope.enabled)
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- re-resolves the rail when capabilities change
       if (first) setActiveScope(first.id)
     }
-    // activeScope is intentionally read but not a dependency: including it
-    // would re-run on every operator rotation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableScopes])
   const eventFormOptions = eventOptions.length > 0 ? eventOptions : EVENT_TYPES
 
-  /** Edit the period allocation / vocab for THIS match (PART 14 `set_fixture_rules`). */
   const [ruleDraft, setRuleDraft] = useState({ periods: '', period_minutes: '', break_minutes: '' })
   const [rulesSaving, setRulesSaving] = useState(false)
 
@@ -1075,13 +1003,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     notify('success', 'Allocations reset to the sport defaults.')
   }
 
-  // ---------------------------------------------------------------------------
-  // PART 15 — lineup writes. Every mutation goes through the duty-checked
-  // `set_fixture_lineup()` RPC; the optimistic local update is corrected (or
-  // reverted by the realtime merge) with the RPC's authoritative row.
-  // ---------------------------------------------------------------------------
   const nextSlotFor = (teamId: string): number => {
-    // Slots are unique per (fixture, team), so only this team's slots matter.
     const used = new Set(
       lineups
         .filter((slot) =>
@@ -1104,7 +1026,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     role?: string | null
     isCaptain?: boolean
     remove?: boolean
-    /** Row id, used for the optimistic local removal only. */
     id?: string
   }) => {
     if (!canLineup) {
@@ -1142,11 +1063,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   }
 
   const lineupCourt = arrangement?.court ?? { shape: 'pitch', orientation: 'horizontal' }
-  /**
-   * Slots are grouped into home/away by their player's team. Rows that name an
-   * athlete instead of a squad player (`athlete_id`) belong to individual
-   * sports and are rendered by the results panel, not this canvas.
-   */
   const slotsForTeam = (teamId: string | undefined): FormationSlot[] =>
     teamId
       ? lineups.filter((slot) =>
@@ -1155,8 +1071,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       : []
   const homeSlots = slotsForTeam(fixture?.home_team?.id)
   const awaySlots = slotsForTeam(fixture?.away_team?.id)
-
-
 
   const clock = arrangement?.clock ?? null
   const segmentLabels = useMemo(() => (clock ? clockSegmentLabels(clock) : []), [clock])
@@ -1169,227 +1083,130 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     elapsedSeconds % 60,
   ).padStart(2, '0')}`
 
-  /**
-   * Generic period engine driven by the sport's `clock` config.
-   * Type 'none', 'sets' or 'innings' has no live clock — Start/Pause/End are
-   * replaced by plain status buttons below.
-   */
-  const renderGenericClockControls = () => {
-    if (!clock || clock.type === 'none' || clock.type === 'sets' || clock.type === 'innings') {
-      const endLabel = clock?.type === 'innings' ? 'End match (innings complete)' : 'End match'
-      return (
-        <>
-          {(status === 'scheduled' || status === 'full_time') && canClock && (
+  const isRunning = status === 'in_progress' || status === 'extra_time'
+
+  const renderFallbackClockControls = () => {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap gap-2">
+          {status === 'scheduled' && (
             <button
               type="button"
               disabled={busy}
-              onClick={() =>
-                void startClockWithPeriod(status === 'full_time' ? 'extra_time' : 'in_progress', 0)
-              }
+              onClick={() => void startClock('in_progress', 0)}
               className={adminPrimaryButton}
             >
-              {status === 'scheduled' ? 'Start match' : 'Continue match'}
+              Start 1st half
             </button>
           )}
-          {(isRunning || status === 'paused' || status === 'half_time') && canClock && (
-            <>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void endClock('full_time', minute)}
-                className={adminSubtleButton}
-              >
-                {endLabel}
-              </button>
-              {(isRunning || status === 'paused' || status === 'half_time') && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    isRunning
-                      ? void pauseClock()
-                      : void resumeClockWithPeriod(status === 'paused' ? 'in_progress' : 'extra_time', minute)
-                  }
-                  className={adminSubtleButton}
-                >
-                  {isRunning ? 'Pause' : 'Resume'}
-                </button>
-              )}
-            </>
+          {isRunning && minute < 45 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void endClock('half_time', 45)}
+              className={adminSubtleButton}
+            >
+              End 1st half
+            </button>
           )}
-        </>
-      )
-    }
+          {status === 'half_time' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void startClock('in_progress', 45)}
+              className={adminPrimaryButton}
+            >
+              Start 2nd half
+            </button>
+          )}
+          {isRunning && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void pauseClock()}
+              className={adminSubtleButton}
+            >
+              Pause
+            </button>
+          )}
+          {status === 'paused' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void startClock('in_progress', minute)}
+              className={adminPrimaryButton}
+            >
+              Resume
+            </button>
+          )}
+          {isRunning && minute >= 45 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void endClock('full_time', 90)}
+              className={adminSubtleButton}
+            >
+              End 2nd half (FT)
+            </button>
+          )}
+          {status === 'full_time' && homeScore === awayScore && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void startClock('extra_time', 90)}
+              className={adminPrimaryButton}
+            >
+              Start extra time
+            </button>
+          )}
+          {status === 'extra_time' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void endClock('full_time', 120)}
+              className={adminSubtleButton}
+            >
+              End after extra time
+            </button>
+          )}
+        </div>
 
-    const segments = clock.periods > 0 ? clock.periods : 2
-    const minutes = clock.period_minutes > 0 ? clock.period_minutes : 45
-    const startBoundary = (index: number) => index * minutes
-    const endBoundary = (index: number) => (index + 1) * minutes
-
-    return (
-      <>
-        {segmentLabels.map((label, index) => {
-          const startsNew = startBoundary(index)
-          const endsAt = endBoundary(index)
-          const isLast = index === segments - 1
-          const endStatus =
-            clock.type === 'halves' && segments === 2 && index === 0 ? 'half_time' : 'paused'
-
-          return (
-            <span key={label} className="inline-flex flex-wrap gap-2">
-              {status === 'scheduled' && index === 0 && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void startClockWithPeriod('in_progress', 0)}
-                  className={adminPrimaryButton}
-                >
-                  Start {label}
-                </button>
-              )}
-              {(status === 'half_time' || status === 'paused') && !isLast && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void startClockWithPeriod('in_progress', startsNew)}
-                  className={adminPrimaryButton}
-                >
-                  Start {label}
-                </button>
-              )}
-              {isRunning && minute >= startsNew && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void endClock(isLast ? 'full_time' : endStatus, endsAt)}
-                  className={adminSubtleButton}
-                >
-                  End {label}
-                </button>
-              )}
-            </span>
-          )
-        })}
-        {isRunning && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void pauseClock()}
-            className={adminSubtleButton}
-          >
-            Pause
-          </button>
-        )}
-        {clock?.extra && clock.extra.periods > 0 && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void startClockWithPeriod(
-                'extra_time',
-                segments * (clock?.period_minutes ?? 0)
-              )
-            }
-            className={adminPrimaryButton}
-          >
-            Start extra time
-          </button>
-        )}
-      </>
+        {/* Stoppage Time / Extra Minutes Quick Controls */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+          <span className="text-xs font-semibold text-gray-400 mr-2">
+            Add Stoppage Time:
+          </span>
+          {[1, 2, 3, 5].map((mins) => (
+            <button
+              key={mins}
+              type="button"
+              disabled={busy}
+              onClick={() => void setStoppageTime(mins)}
+              className={
+                'px-3 py-1.5 text-xs font-bold rounded-lg border transition ' +
+                (addedMinutes === mins
+                  ? 'bg-amber-500 text-black border-amber-400'
+                  : 'bg-white/5 text-amber-300 border-amber-500/30 hover:bg-amber-500/20')
+              }
+            >
+              +{mins} min
+            </button>
+          ))}
+          {addedMinutes > 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setStoppageTime(0)}
+              className="px-2.5 py-1.5 text-xs text-gray-400 hover:text-white underline"
+            >
+              Clear (+0)
+            </button>
+          )}
+        </div>
+      </div>
     )
   }
 
-  const startClockWithPeriod = startClock
-  const resumeClockWithPeriod = startClockWithPeriod
-  const isRunning = status === 'in_progress' || status === 'extra_time'
-
-  /** Football-rules clock UI (halves) when no catalogue sport is attached. */
-  const renderFallbackClockControls = () => {
-    return (
-      <>
-        {status === 'scheduled' && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void startClock('in_progress', 0)}
-            className={adminPrimaryButton}
-          >
-            Start 1st half
-          </button>
-        )}
-        {isRunning && minute < 45 && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void endClock('half_time', 45)}
-            className={adminSubtleButton}
-          >
-            End 1st half
-          </button>
-        )}
-        {status === 'half_time' && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void startClock('in_progress', 45)}
-            className={adminPrimaryButton}
-          >
-            Start 2nd half
-          </button>
-        )}
-        {isRunning && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void pauseClock()}
-            className={adminSubtleButton}
-          >
-            Pause
-          </button>
-        )}
-        {status === 'paused' && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void startClock('in_progress', minute)}
-            className={adminPrimaryButton}
-          >
-            Resume
-          </button>
-        )}
-        {isRunning && minute >= 45 && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void endClock('full_time', 90)}
-            className={adminSubtleButton}
-          >
-            Full time
-          </button>
-        )}
-        {status === 'full_time' && homeScore === awayScore && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void startClock('extra_time', 90)}
-            className={adminPrimaryButton}
-          >
-            Start extra time
-          </button>
-        )}
-        {status === 'extra_time' && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void endClock('full_time', 120)}
-            className={adminSubtleButton}
-          >
-            End after extra time
-          </button>
-        )}
-      </>
-    )
-  }
   const teamOptions = [
     { value: '', label: 'None / neutral' },
     ...(fixture?.home_team ? [{ value: fixture.home_team.id, label: `${fixture.home_team.name} (home)` }] : []),
@@ -1399,9 +1216,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     ? players.filter((player) => player.team_id === newEvent.team_id)
     : players
 
-  /** Event types this operator may actually log (drives the Events form). */
   const loggableEventOptions = eventFormOptions.filter((option) => eventAccess[option.type])
-  /** Stat rows this operator may actually record, grouped for the rail. */
   const writableStatGroups = statGroups
     .map((group) => ({
       ...group,
@@ -1454,7 +1269,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     )
   }
 
-return (
+  return (
     <div className="min-h-screen bg-[#0f172a] pb-24 text-white">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0f172a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -1473,7 +1288,10 @@ return (
             >
               {isRunning ? 'Live' : status.replace(/_/g, ' ')}
             </span>
-            <span className="font-mono text-lg tabular-nums">{clockDisplay}</span>
+            <span className="font-mono text-lg tabular-nums">
+              {clockDisplay}
+              {addedMinutes > 0 ? ` (+${addedMinutes}')` : ''}
+            </span>
             {fixture.tournament_id && (
               <Link
                 href={`/admin/tournaments/${fixture.tournament_id}`}
@@ -1489,7 +1307,6 @@ return (
       <div className="mx-auto max-w-5xl space-y-8 px-4 pt-8 sm:px-6 lg:px-8">
         <StatusBanner status={message} />
 
-        {/* Rotation rail — the one console, rotated across every logging scope. */}
         <nav
           data-tour="console-scopes"
           aria-label="Logging scopes"
@@ -1517,14 +1334,11 @@ return (
           ))}
         </nav>
 
-        {/* Live logger roster — who is logging what on this match right now. */}
         <section data-tour="console-header" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Logging now</h2>
             <span className="text-xs text-gray-500">
-              {runtime.hasLoggersRpc
-                ? 'One logger per stream: two people cannot record the same scope on this match.'
-                : 'Coverage requires the latest database setup (fixture_loggers).'}
+              One logger per stream: two people cannot record the same scope on this match.
             </span>
           </div>
           {myClaims.length === 0 ? (
@@ -1546,115 +1360,102 @@ return (
         </section>
 
         {activeScope === 'score' && (
-        <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-          <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
-            <div className="text-center md:text-right">
-              <p className="text-xl font-bold">{fixture.home_team?.name ?? 'Home'}</p>
-              <p className="text-xs text-gray-400">Home</p>
-            </div>
-
-            <div className="flex items-center justify-center gap-3">
-              <div className="flex flex-col items-center gap-1">
-                <input
-                  type="number"
-                  min={allowNegativeScore ? undefined : 0}
-                  value={homeScore}
-                  onChange={(event) => setHomeScore(Number.parseInt(event.target.value, 10) || 0)}
-                  className="h-16 w-16 rounded-xl border border-white/10 bg-[#0f172a] text-center text-3xl font-black focus:border-indigo-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void saveScore(homeScore + 1, awayScore)}
-                  className={adminSubtleButton}
-                >
-                  +1
-                </button>
+          <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+            <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
+              <div className="text-center md:text-right">
+                <p className="text-xl font-bold">{fixture.home_team?.name ?? 'Home'}</p>
+                <p className="text-xs text-gray-400">Home</p>
               </div>
-              <span className="text-2xl font-bold text-gray-500">–</span>
-              <div className="flex flex-col items-center gap-1">
-                <input
-                  type="number"
-                  min={allowNegativeScore ? undefined : 0}
-                  value={awayScore}
-                  onChange={(event) => setAwayScore(Number.parseInt(event.target.value, 10) || 0)}
-                  className="h-16 w-16 rounded-xl border border-white/10 bg-[#0f172a] text-center text-3xl font-black focus:border-indigo-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void saveScore(homeScore, awayScore + 1)}
-                  className={adminSubtleButton}
-                >
-                  +1
-                </button>
+
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex flex-col items-center gap-1">
+                  <input
+                    type="number"
+                    min={allowNegativeScore ? undefined : 0}
+                    value={homeScore}
+                    onChange={(event) => setHomeScore(Number.parseInt(event.target.value, 10) || 0)}
+                    className="h-16 w-16 rounded-xl border border-white/10 bg-[#0f172a] text-center text-3xl font-black focus:border-indigo-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void saveScore(homeScore + 1, awayScore)}
+                    className={adminSubtleButton}
+                  >
+                    +1
+                  </button>
+                </div>
+                <span className="text-2xl font-bold text-gray-500">–</span>
+                <div className="flex flex-col items-center gap-1">
+                  <input
+                    type="number"
+                    min={allowNegativeScore ? undefined : 0}
+                    value={awayScore}
+                    onChange={(event) => setAwayScore(Number.parseInt(event.target.value, 10) || 0)}
+                    className="h-16 w-16 rounded-xl border border-white/10 bg-[#0f172a] text-center text-3xl font-black focus:border-indigo-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void saveScore(homeScore, awayScore + 1)}
+                    className={adminSubtleButton}
+                  >
+                    +1
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-center md:text-left">
+                <p className="text-xl font-bold">{fixture.away_team?.name ?? 'Away'}</p>
+                <p className="text-xs text-gray-400">Away</p>
               </div>
             </div>
 
-            <div className="text-center md:text-left">
-              <p className="text-xl font-bold">{fixture.away_team?.name ?? 'Away'}</p>
-              <p className="text-xs text-gray-400">Away</p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-white/10 pt-4">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void saveScore(homeScore, awayScore)}
+                className={adminPrimaryButton}
+              >
+                Save {arrangement ? scoreLabel(arrangement.scoringType) : 'score'}
+              </button>
+              <span className="text-xs text-gray-500">
+                {scoreName || 'Score'} is written atomically through <code>record_score()</code>.
+              </span>
             </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-white/10 pt-4">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void saveScore(homeScore, awayScore)}
-              className={adminPrimaryButton}
-            >
-              Save {arrangement ? scoreLabel(arrangement.scoringType) : 'score'}
-            </button>
-            <span className="text-xs text-gray-500">
-              {scoreName || 'Score'} is written atomically through <code>record_score()</code>.
-              {arrangement && arrangement.scoringType !== 'duel' && (
-                <>
-                  {' '}
-                  For {arrangement.name}, official standings use sets/round wins or the
-                  results &amp; medals panel below — the scoreboard stays for quick display.
-                </>
-              )}
-            </span>
-          </div>
-        </section>
+          </section>
         )}
 
         {activeScope === 'clock' && (
-<section data-tour="console-clock" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-          <h2 className="mb-4 text-lg font-semibold">Clock &amp; status</h2>
-          <div className="flex flex-wrap gap-2">
-            {clock ? (
-              renderGenericClockControls()
-            ) : (
-              renderFallbackClockControls()
-            )}
-          </div>
+          <section data-tour="console-clock" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+            <h2 className="mb-4 text-lg font-semibold">Clock &amp; status</h2>
+            {renderFallbackClockControls()}
 
-          <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
-            <Field label="Override minute">
-              <TextInput
-                value={minuteInput}
-                onValueChange={setMinuteInput}
-                placeholder={String(minute)}
-                inputMode="numeric"
-                className={adminInputClass + ' w-32'}
-              />
-            </Field>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void overrideMinute()}
-              className={adminSubtleButton}
-            >
-              Apply
-            </button>
-            <p className="text-xs text-gray-500">
-              Elapsed: {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}{' '}
-              &bull; minute {minute}
-            </p>
-          </div>
-        </section>
+            <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-white/10 pt-4">
+              <Field label="Override minute">
+                <TextInput
+                  value={minuteInput}
+                  onValueChange={setMinuteInput}
+                  placeholder={String(minute)}
+                  inputMode="numeric"
+                  className={adminInputClass + ' w-32'}
+                />
+              </Field>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void overrideMinute()}
+                className={adminSubtleButton}
+              >
+                Apply
+              </button>
+              <p className="text-xs text-gray-500">
+                Elapsed: {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}{' '}
+                &bull; minute {minute}
+              </p>
+            </div>
+          </section>
         )}
 
         {activeScope === 'clock' && canRules && (
@@ -1728,133 +1529,100 @@ return (
                 </button>
               </div>
             </form>
-            <p className="mt-3 text-xs text-gray-500">
-              Saved per match through <code>set_fixture_rules()</code> — the global sports catalogue is
-              untouched, so other fixtures keep their own allocations.
-            </p>
           </section>
         )}
 
         {activeScope === 'stats' && (
-        <section data-tour="console-stats" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Match statistics</h2>
-            <span className="text-xs text-gray-500">
-              Each tap calls <code>record_stat()</code> (atomic + duty checked).
-            </span>
-          </div>
+          <section data-tour="console-stats" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Match statistics</h2>
+              <span className="text-xs text-gray-500">
+                Each tap calls <code>record_stat()</code> (atomic + duty checked).
+              </span>
+            </div>
 
-          {writableStatGroups.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Your duties do not cover any stat on this match — you can still watch the numbers below.
-            </p>
-          ) : null}
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {(['home', 'away'] as Side[]).map((side) => (
-              <div key={side}>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-indigo-300">
-                  {side === 'home'
-                    ? fixture.home_team?.name ?? 'Home'
-                    : fixture.away_team?.name ?? 'Away'}
-                </h3>
-                {writableStatGroups.map((group) => (
-                  <div key={group.group ?? 'other'} className="mb-4">
-                    {group.group && (
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500">
-                        {group.group}
-                      </p>
-                    )}
-                    <ul className="space-y-2">
-                      {group.options.map((stat) => (
-                        <li
-                          key={stat.key}
-                          className="flex items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2"
-                        >
-                          <span className="text-sm text-gray-300">{stat.label}</span>
-                          <span className="flex items-center gap-2">
-                            <span className="font-mono text-sm tabular-nums">
-                              {statNumber(stats, side, stat.key)}
-                            </span>
-                            {stat.input === 'value' ? (
-                              <>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="any"
-                                  aria-label={`Value for ${stat.label} (${side})`}
-                                  className={`${adminInputClass} w-20 text-sm`}
-                                  value={valueInputs[`${side}:${stat.key}`] ?? ''}
-                                  onChange={(event) =>
-                                    setValueInputs((current) => ({
-                                      ...current,
-                                      [`${side}:${stat.key}`]: event.target.value,
-                                    }))
-                                  }
-                                />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {(['home', 'away'] as Side[]).map((side) => (
+                <div key={side}>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-indigo-300">
+                    {side === 'home'
+                      ? fixture.home_team?.name ?? 'Home'
+                      : fixture.away_team?.name ?? 'Away'}
+                  </h3>
+                  {writableStatGroups.map((group) => (
+                    <div key={group.group ?? 'other'} className="mb-4">
+                      {group.group && (
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500">
+                          {group.group}
+                        </p>
+                      )}
+                      <ul className="space-y-2">
+                        {group.options.map((stat) => (
+                          <li
+                            key={stat.key}
+                            className="flex items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2"
+                          >
+                            <span className="text-sm text-gray-300">{stat.label}</span>
+                            <span className="flex items-center gap-2">
+                              <span className="font-mono text-sm tabular-nums">
+                                {statNumber(stats, side, stat.key)}
+                              </span>
+                              {stat.input === 'value' ? (
+                                <>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="any"
+                                    aria-label={`Value for ${stat.label} (${side})`}
+                                    className={`${adminInputClass} w-20 text-sm`}
+                                    value={valueInputs[`${side}:${stat.key}`] ?? ''}
+                                    onChange={(event) =>
+                                      setValueInputs((current) => ({
+                                        ...current,
+                                        [`${side}:${stat.key}`]: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={claimBusy}
+                                    aria-label={`Record ${stat.label} for ${side}`}
+                                    onClick={() => void incrementStat(side, stat.key, stat.input)}
+                                    className={adminSubtleButton}
+                                  >
+                                    Save
+                                  </button>
+                                </>
+                              ) : (
                                 <button
                                   type="button"
                                   disabled={claimBusy}
-                                  aria-label={`Record ${stat.label} for ${side}`}
+                                  aria-label={`Add ${stat.label} for ${side}`}
                                   onClick={() => void incrementStat(side, stat.key, stat.input)}
                                   className={adminSubtleButton}
                                 >
-                                  Save
+                                  +1
                                 </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={claimBusy}
-                                aria-label={`Add ${stat.label} for ${side}`}
-                                onClick={() => void incrementStat(side, stat.key, stat.input)}
-                                className={adminSubtleButton}
-                              >
-                                +1
-                              </button>
-                            )}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {readOnlyStatGroups.length > 0 && (
-            <div className="mt-6 border-t border-white/10 pt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500">
-                Read-only — another logger owns these streams
-              </p>
-              <ul className="flex flex-wrap gap-2">
-                {readOnlyStatGroups.flatMap((group) => group.options).map((option) => (
-                  <li
-                    key={option.key}
-                    className="rounded-full bg-white/5 px-3 py-1 text-xs text-gray-400"
-                  >
-                    {option.label}
-                  </li>
-                ))}
-              </ul>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
-          )}
-        </section>
+          </section>
         )}
 
         {activeScope === 'lineup' && (
-        <section data-tour="console-lineup" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-          <h2 className="mb-1 text-lg font-semibold">Lineups &amp; formation</h2>
-          <p className="mb-4 text-xs text-gray-500">
-            Drag tokens to set each player&apos;s position. Coordinates are stored on{' '}
-            <code>fixture_lineups</code> and streamed live to the public page.
-          </p>
-          {!runtime.hasLineupRpc ? (
-            <p className="rounded-lg bg-white/5 px-3 py-2 text-sm text-gray-400">
-              Formations need the latest database setup (db-setup.sql).
+          <section data-tour="console-lineup" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+            <h2 className="mb-1 text-lg font-semibold">Lineups &amp; formation</h2>
+            <p className="mb-4 text-xs text-gray-500">
+              Drag tokens to set each player&apos;s position. Coordinates are stored on{' '}
+              <code>fixture_lineups</code> and streamed live to the public page.
             </p>
-          ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               {(['home', 'away'] as const).map((side) => {
                 const team = side === 'home' ? fixture.home_team : fixture.away_team
@@ -1937,141 +1705,133 @@ return (
                 )
               })}
             </div>
-          )}
-        </section>
+          </section>
         )}
 
-        {activeScope === 'timeline' && (
-        <div data-tour="console-timeline" className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-            <h2 className="mb-4 text-lg font-semibold">Timeline ({events.length})</h2>
-            {events.length === 0 ? (
-              <p className="text-sm text-gray-500">No events logged yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {events.map((row) => (
-                  <li
-                    key={row.id}
-                    className="flex items-start gap-3 rounded-lg border border-white/10 bg-[#0f172a] p-3"
-                  >
-                    <span className="w-10 shrink-0 font-bold text-indigo-400">{row.minute}&apos;</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold capitalize">
-                        {row.event_type.replace(/_/g, ' ')}
-                      </p>
-                      {row.player_name && (
-                        <p className="text-xs text-gray-300">{row.player_name}</p>
-                      )}
-                      {row.details && <p className="text-xs text-gray-500">{row.details}</p>}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={claimBusy}
-                      onClick={() => void deleteEvent(row.id)}
-                      className={adminSubtleButton}
+        {activeScope === 'timeline' || activeScope === 'events' ? (
+          <div data-tour="console-timeline" className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+              <h2 className="mb-4 text-lg font-semibold">Timeline ({events.length})</h2>
+              {events.length === 0 ? (
+                <p className="text-sm text-gray-500">No events logged yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {events.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-start gap-3 rounded-lg border border-white/10 bg-[#0f172a] p-3"
                     >
-                      Delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                      <span className="w-10 shrink-0 font-bold text-indigo-400">{row.minute}&apos;</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold capitalize">
+                          {row.event_type.replace(/_/g, ' ')}
+                        </p>
+                        {row.player_name && (
+                          <p className="text-xs text-gray-300">{row.player_name}</p>
+                        )}
+                        {row.details && <p className="text-xs text-gray-500">{row.details}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={claimBusy}
+                        onClick={() => void deleteEvent(row.id)}
+                        className={adminSubtleButton}
+                      >
+                        Delete
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-          <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-            <h2 className="mb-4 text-lg font-semibold">Log an event</h2>
-            {loggableEventOptions.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                Your duties do not cover any event type on this match. Ask a tournament admin for an
-                <code className="mx-1">event:&lt;type&gt;</code> duty, or watch the timeline.
-              </p>
-            ) : (
-            <form onSubmit={logEvent} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="Event type">
+            <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+              <h2 className="mb-4 text-lg font-semibold">Log an event</h2>
+              <form onSubmit={logEvent} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Event type">
+                    <SelectInput
+                      value={loggableEventOptions.some((option) => option.type === newEvent.event_type)
+                        ? newEvent.event_type
+                        : loggableEventOptions[0]?.type ?? 'goal'}
+                      options={loggableEventOptions.map((option) => ({
+                        value: option.type,
+                        label: option.label.replace(/\b\w/g, (letter) => letter.toUpperCase()),
+                      }))}
+                      onValueChange={(value) => setNewEvent({ ...newEvent, event_type: value })}
+                    />
+                  </Field>
+                  <Field label="Minute">
+                    <input
+                      type="number"
+                      min={0}
+                      max={130}
+                      className={adminInputClass}
+                      value={newEvent.minute}
+                      onChange={(event) => setNewEvent({ ...newEvent, minute: event.target.value })}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Team">
                   <SelectInput
-                    value={loggableEventOptions.some((option) => option.type === newEvent.event_type)
-                      ? newEvent.event_type
-                      : loggableEventOptions[0].type}
-                    options={loggableEventOptions.map((option) => ({
-                      value: option.type,
-                      label: option.label.replace(/\b\w/g, (letter) => letter.toUpperCase()),
-                    }))}
-                    onValueChange={(value) => setNewEvent({ ...newEvent, event_type: value })}
+                    value={newEvent.team_id}
+                    options={teamOptions}
+                    onValueChange={(value) => setNewEvent({ ...newEvent, team_id: value })}
                   />
                 </Field>
-                <Field label="Minute">
-                  <input
-                    type="number"
-                    min={0}
-                    max={130}
-                    className={adminInputClass}
-                    value={newEvent.minute}
-                    onChange={(event) => setNewEvent({ ...newEvent, minute: event.target.value })}
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Player">
+                    <input
+                      type="text"
+                      list="match-squad"
+                      className={adminInputClass}
+                      placeholder="Type or pick a squad member"
+                      value={newEvent.player_name}
+                      onChange={(event) =>
+                        setNewEvent({ ...newEvent, player_name: event.target.value })
+                      }
+                    />
+                    <datalist id="match-squad">
+                      {squadForEvent.map((player) => (
+                        <option key={player.id} value={player.name} />
+                      ))}
+                    </datalist>
+                  </Field>
+                  <Field label="Assist (goals only)">
+                    <input
+                      type="text"
+                      list="match-squad-assist"
+                      className={adminInputClass}
+                      value={newEvent.assist_name}
+                      onChange={(event) =>
+                        setNewEvent({ ...newEvent, assist_name: event.target.value })
+                      }
+                    />
+                    <datalist id="match-squad-assist">
+                      {squadForEvent.map((player) => (
+                        <option key={player.id} value={player.name} />
+                      ))}
+                    </datalist>
+                  </Field>
+                </div>
+
+                <Field label="Details / notes">
+                  <TextInput
+                    placeholder="e.g. Player A in, Player B out"
+                    value={newEvent.details}
+                    onValueChange={(value) => setNewEvent({ ...newEvent, details: value })}
                   />
                 </Field>
-              </div>
 
-              <Field label="Team">
-                <SelectInput
-                  value={newEvent.team_id}
-                  options={teamOptions}
-                  onValueChange={(value) => setNewEvent({ ...newEvent, team_id: value })}
-                />
-              </Field>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="Player">
-                  <input
-                    type="text"
-                    list="match-squad"
-                    className={adminInputClass}
-                    placeholder="Type or pick a squad member"
-                    value={newEvent.player_name}
-                    onChange={(event) =>
-                      setNewEvent({ ...newEvent, player_name: event.target.value })
-                    }
-                  />
-                  <datalist id="match-squad">
-                    {squadForEvent.map((player) => (
-                      <option key={player.id} value={player.name} />
-                    ))}
-                  </datalist>
-                </Field>
-                <Field label="Assist (goals only)">
-                  <input
-                    type="text"
-                    list="match-squad-assist"
-                    className={adminInputClass}
-                    value={newEvent.assist_name}
-                    onChange={(event) =>
-                      setNewEvent({ ...newEvent, assist_name: event.target.value })
-                    }
-                  />
-                  <datalist id="match-squad-assist">
-                    {squadForEvent.map((player) => (
-                      <option key={player.id} value={player.name} />
-                    ))}
-                  </datalist>
-                </Field>
-              </div>
-
-              <Field label="Details / notes">
-                <TextInput
-                  placeholder="e.g. Player A in, Player B out"
-                  value={newEvent.details}
-                  onValueChange={(value) => setNewEvent({ ...newEvent, details: value })}
-                />
-              </Field>
-
-              <button type="submit" disabled={claimBusy} className={adminPrimaryButton}>
-                {busy ? 'Saving…' : 'Log event'}
-              </button>
-            </form>
-            )}
-          </section>
-        </div>
-        )}
+                <button type="submit" disabled={claimBusy} className={adminPrimaryButton}>
+                  {busy ? 'Saving…' : 'Log event'}
+                </button>
+              </form>
+            </section>
+          </div>
+        ) : null}
       </div>
     </div>
   )
