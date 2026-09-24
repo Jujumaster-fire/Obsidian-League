@@ -1,5 +1,6 @@
-import { getEffectiveMinute } from "@/lib/match-clock"
 'use client'
+
+import { getEffectiveMinute } from "@/lib/match-clock"
 
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
