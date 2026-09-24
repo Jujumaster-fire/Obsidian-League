@@ -37,13 +37,16 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
 
   const view = computeCompetitionsView(fixtures, teams, events, players)
 
+  const isOngoing = (status: string | null | undefined) =>
+    status === 'in_progress' || status === 'extra_time' || status === 'paused' || status === 'half_time'
+
   const liveFixtures = [...view.results, ...view.upcoming]
-    .filter((f) => f.status === 'in_progress' || f.status === 'extra_time')
+    .filter((f) => isOngoing(f.status))
     .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
 
-  // Exclude kicked-off (live) matches from the upcoming list so they only render under Live Now.
+  // Exclude kicked-off (live/ongoing) matches from the upcoming list so they only render under Live Now.
   const upcoming = view.upcoming.filter(
-    (f) => f.status !== 'in_progress' && f.status !== 'extra_time'
+    (f) => !isOngoing(f.status) && f.status !== 'full_time'
   )
   const results = view.results
 
