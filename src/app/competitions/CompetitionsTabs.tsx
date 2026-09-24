@@ -28,11 +28,6 @@ interface CompetitionsTabsProps {
   players: Player[]
 }
 
-/**
- * Client-driven tab UI. Reads ?tab= from the URL on mount, writes back via
- * shallow pushState so the browser history works and the URL is shareable.
- * Server renders the data; this component renders the interactive layer.
- */
 export function CompetitionsTabs({ fixtures, teams, events, players }: CompetitionsTabsProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -46,13 +41,12 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
     .filter((f) => f.status === 'in_progress' || f.status === 'extra_time')
     .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
 
-  const upcoming = view.upcoming
+  // Exclude kicked-off (live) matches from the upcoming list so they only render under Live Now.
+  const upcoming = view.upcoming.filter(
+    (f) => f.status !== 'in_progress' && f.status !== 'extra_time'
+  )
   const results = view.results
 
-  /**
-   * Shallow route update — changes ?tab= without reloading the page.
-   * The server already rendered everything; we just scroll into view.
-   */
   const navigateTo = (tab: Tab) => {
     const url = new URL(window.location.href)
     if (tab === DEFAULT_TAB) {
@@ -382,7 +376,7 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
         />
       </div>
 
-      {/* Navigation bar (jumps to section) */}
+      {/* Navigation bar */}
       <nav className="sticky top-16 z-20 bg-[#0f172a]/95 backdrop-blur border-t border-white/10 py-2">
         <div className="max-w-7xl mx-auto px-4 flex overflow-x-auto gap-1 [&::-webkit-scrollbar]:hidden">
           {VALID_TABS.map((tab) => (
