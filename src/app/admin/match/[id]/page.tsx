@@ -26,7 +26,6 @@ import {
 } from '@/lib/duties'
 import { FormationCanvas, type FormationSlot } from '@/components/FormationCanvas'
 import {
-  clockSegmentLabels,
   groupStatOptions,
   parseSportArrangement,
   resolveFixtureRules,
@@ -164,7 +163,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     hasEffectiveRulesRpc: false,
     hasLineupRpc: false,
   })
-  const [activeScope, setActiveScope] = useState<ScopeId>('score')
+  const [rawActiveScope, setActiveScope] = useState<ScopeId>('score')
   const [valueInputs, setValueInputs] = useState<Record<string, string>>({})
 
   const [status, setStatus] = useState('scheduled')
@@ -206,7 +205,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   )
 
   const loadMatch = useCallback(async () => {
-    setLoading(true)
     const { data, error } = await supabase
       .from('fixtures')
       .select(
@@ -528,6 +526,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
+    // oxlint-disable-next-line react/set-state-in-effect
     void loadMatch()
   }, [authLoading, canAccessAdmin, id, loadMatch])
 
@@ -919,12 +918,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     return list
   }, [canScore, canClock, canRules, canLineup, statOptions, statAccess, eventOptions, eventAccess])
 
-  useEffect(() => {
-    if (!availableScopes.some((scope) => scope.id === activeScope && scope.enabled)) {
-      const first = availableScopes.find((scope) => scope.enabled)
-      if (first) setActiveScope(first.id)
+  const activeScope = useMemo(() => {
+    if (availableScopes.some((scope) => scope.id === rawActiveScope && scope.enabled)) {
+      return rawActiveScope
     }
-  }, [availableScopes])
+    return availableScopes.find((scope) => scope.enabled)?.id ?? 'score'
+  }, [availableScopes, rawActiveScope])
+
   const eventFormOptions = eventOptions.length > 0 ? eventOptions : EVENT_TYPES
 
   const [ruleDraft, setRuleDraft] = useState({ periods: '', period_minutes: '', break_minutes: '' })
@@ -1073,7 +1073,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const awaySlots = slotsForTeam(fixture?.away_team?.id)
 
   const clock = arrangement?.clock ?? null
-  const segmentLabels = useMemo(() => (clock ? clockSegmentLabels(clock) : []), [clock])
   const scoreName =
     fixture && arrangement.name !== 'Match'
       ? `${arrangement.name} · ${scoreLabel(arrangement.scoringType)}`
@@ -1221,12 +1220,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     .map((group) => ({
       ...group,
       options: group.options.filter((option) => statAccess[option.key]),
-    }))
-    .filter((group) => group.options.length > 0)
-  const readOnlyStatGroups = statGroups
-    .map((group) => ({
-      ...group,
-      options: group.options.filter((option) => !statAccess[option.key]),
     }))
     .filter((group) => group.options.length > 0)
   const myClaims = loggers.filter((row) => !row.is_stale)
