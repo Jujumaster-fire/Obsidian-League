@@ -4,27 +4,20 @@ export interface ServerMatchCardProps {
   match: Fixture
 }
 
-/**
- * Static, server-rendered match card.
- *
- * This is identical in shape to the card that was inside the old
- * `CompetitionsContent` client component, but it has no state and no
- * Realtime wiring — it just renders whatever was passed to it. The new
- * competitions page uses it both for the server-rendered first paint and
- * as the shell that the client-side Realtime subscriber updates.
- */
 export function ServerMatchCard({ match }: ServerMatchCardProps) {
-  const statusLabel =
-    match.status === 'in_progress'
-      ? 'LIVE'
-      : match.status === 'full_time'
-        ? 'FT'
-        : match.status === 'cancelled'
-          ? 'CANCELLED'
-          : new Date(match.match_date).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
+  const isLive = match.status === 'in_progress' || match.status === 'extra_time'
+  const matchTime = match.current_minute ? `${match.current_minute}'` : 'LIVE'
+
+  const statusLabel = isLive
+    ? matchTime
+    : match.status === 'full_time'
+      ? 'FT'
+      : match.status === 'cancelled'
+        ? 'CANCELLED'
+        : new Date(match.match_date).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
 
   const dateLabel = new Date(match.match_date).toLocaleDateString()
   const stageLabel = (match.stage ?? 'Group stage').replace(/_/g, ' ')
@@ -51,8 +44,9 @@ export function ServerMatchCard({ match }: ServerMatchCardProps) {
       </div>
 
       <div className="w-full md:w-32 flex justify-end mt-2 md:mt-0">
-        {match.status === 'in_progress' ? (
-          <span className="text-red-500 font-bold animate-pulse text-sm">
+        {isLive ? (
+          <span className="text-red-500 font-bold animate-pulse text-sm flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
             {statusLabel}
           </span>
         ) : match.status === 'full_time' ? (
