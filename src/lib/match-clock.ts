@@ -1,6 +1,7 @@
 export interface MatchClockStats {
   elapsed_seconds?: number
   timer_started_at?: string | null
+  added_minutes?: number
   [key: string]: unknown
 }
 
@@ -37,9 +38,17 @@ export function getEffectiveMinute(fixture: MatchClockFixture): number {
 }
 
 export function formatMatchTimeLabel(fixture: MatchClockFixture): string {
-  const isLive = fixture.status === 'in_progress' || fixture.status === 'extra_time'
+  const isLive = fixture.status === 'in_progress' || fixture.status === 'extra_time' || fixture.status === 'paused'
+  const stats = fixture.stats as MatchClockStats | null | undefined
+  const addedMinutes = typeof stats?.added_minutes === 'number' && stats.added_minutes > 0 ? stats.added_minutes : 0
+
   if (isLive) {
-    return `${getEffectiveMinute(fixture)}'`
+    const minute = getEffectiveMinute(fixture)
+    if (addedMinutes > 0) {
+      if (minute >= 90) return `90+${addedMinutes}'`
+      if (minute >= 45) return `45+${addedMinutes}'`
+    }
+    return `${minute}'`
   }
   if (fixture.status === 'half_time') return 'HT'
   if (fixture.status === 'full_time') return 'FT'
