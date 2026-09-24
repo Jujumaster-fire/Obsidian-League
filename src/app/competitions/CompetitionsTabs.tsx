@@ -71,7 +71,7 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
 
   return (
     <div className="space-y-12">
-      {/* Section tabs — Google-style underline strip, pinned to the top of the page. */}
+      {/* Section tabs — sticky header strip, pinned under the site nav on all devices. */}
       <nav
         aria-label="Competition sections"
         className="sticky top-16 z-20 -mx-4 border-b border-white/10 bg-[#0f172a]/95 backdrop-blur sm:mx-0"
@@ -399,7 +399,6 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
           final={view.playoffMatches.filter((f) => f.stage === 'final')}
         />
       </div>
-
     </div>
   )
 }
