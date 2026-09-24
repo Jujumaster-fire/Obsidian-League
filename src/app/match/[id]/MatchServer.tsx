@@ -38,6 +38,9 @@ export interface MatchTeamShape {
 export interface MatchStatsShape {
   home?: Record<string, number>
   away?: Record<string, number>
+  elapsed_seconds?: number
+  timer_started_at?: string | null
+  [key: string]: unknown
 }
 
 /** One stored formation token (PART 15 `fixture_lineups`) with its team id. */
