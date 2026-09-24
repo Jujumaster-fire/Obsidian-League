@@ -1,3 +1,4 @@
+import { HomeRealtimeMatches } from "@/components/HomeRealtimeMatches"
 import Link from 'next/link'
 import Navigation from '@/components/Navigation'
 import { HomeInsights } from '@/components/HomeInsights'
@@ -221,7 +222,7 @@ export default async function Home() {
           {hasMatches ? (
              <>
                 <div data-tour="home-matchday">
-                  <MatchesOfTheDaySection matches={matchesOfTheDay} />
+                  <HomeRealtimeMatches initialMatches={matchesOfTheDay} />
                 </div>
                 <div data-tour="home-insights">
                   <HomeInsights posts={postsData} />
