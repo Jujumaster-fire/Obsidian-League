@@ -8,7 +8,7 @@ export interface MatchClockFixture {
   id: string
   status: string | null
   current_minute: number | null
-  stats?: MatchClockStats | null
+  stats?: MatchClockStats | Record<string, unknown> | null
 }
 
 /**
@@ -20,7 +20,7 @@ export interface MatchClockFixture {
  */
 export function getEffectiveMinute(fixture: MatchClockFixture): number {
   const isLive = fixture.status === 'in_progress' || fixture.status === 'extra_time'
-  const stats = fixture.stats
+  const stats = fixture.stats as MatchClockStats | null | undefined
 
   if (isLive && stats?.timer_started_at) {
     const startedAt = new Date(stats.timer_started_at).getTime()
