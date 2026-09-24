@@ -56,8 +56,16 @@ export function useOnboarding(): OnboardingState {
  * same rule there, so keep the two in step.
  */
 export function pathMatches(pathname: string, path: string): boolean {
-  if (path === '/') return pathname === '/'
-  return pathname === path || pathname.startsWith(`${path}/`)
+  /**
+   * `/scout/[id]` is the scout's own logging surface — the same console the
+   * admin side serves at `/admin/match/[id]` — so a tour step declared for
+   * the console must match both routes.
+   */
+  const normalized = pathname.startsWith('/scout/')
+    ? `/admin/match${pathname.slice('/scout'.length)}`
+    : pathname
+  if (path === '/') return normalized === '/'
+  return normalized === path || normalized.startsWith(`${path}/`)
 }
 
 export const readFlag = (key: string): boolean => {

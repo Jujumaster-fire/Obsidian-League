@@ -71,6 +71,30 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
 
   return (
     <div className="space-y-12">
+      {/* Section tabs — Google-style underline strip, pinned to the top of the page. */}
+      <nav
+        aria-label="Competition sections"
+        className="sticky top-16 z-20 -mx-4 border-b border-white/10 bg-[#0f172a]/95 backdrop-blur sm:mx-0"
+      >
+        <div className="mx-auto flex max-w-3xl justify-start gap-1 overflow-x-auto px-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
+          {VALID_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => handleTabClick(tab)}
+              aria-current={activeTab === tab ? 'true' : undefined}
+              className={`whitespace-nowrap border-b-[3px] px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? 'border-indigo-500 text-white'
+                  : 'border-transparent text-gray-400 hover:border-white/20 hover:text-gray-200'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {/* Overview */}
       <div id="section-overview" className="space-y-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -376,24 +400,6 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
         />
       </div>
 
-      {/* Navigation bar */}
-      <nav className="sticky top-16 z-20 bg-[#0f172a]/95 backdrop-blur border-t border-white/10 py-2">
-        <div className="max-w-7xl mx-auto px-4 flex overflow-x-auto gap-1 [&::-webkit-scrollbar]:hidden">
-          {VALID_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => handleTabClick(tab)}
-              className={`px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors border-b-2 ${
-                activeTab === tab
-                  ? 'border-indigo-500 text-white'
-                  : 'border-transparent text-gray-400 hover:text-white'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' ')}
-            </button>
-          ))}
-        </div>
-      </nav>
     </div>
   )
 }

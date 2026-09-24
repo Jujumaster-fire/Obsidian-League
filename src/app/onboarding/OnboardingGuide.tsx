@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useAdminAuth } from '@/lib/use-admin-auth'
@@ -12,6 +12,7 @@ import {
   featuresForRole,
   roleById,
   tourStepsForRole,
+  viewerRoleFor,
   type RoleId,
 } from '@/lib/onboarding'
 
@@ -59,13 +60,48 @@ function describeVisitor(args: {
 export function OnboardingGuideInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { loading, isAppAdmin, memberships } = useAdminAuth()
+  const { loading, authenticated, role: globalRole, isAppAdmin, memberships } = useAdminAuth()
   const { startTour, isActive } = useOnboarding()
   const [activeRole, setActiveRole] = useState<RoleId>(() => roleFromParams(searchParams.get('role')))
+  /** Once the visitor picks a tab by hand, auto-detection never overrides it. */
+  const userPicked = useRef(false)
+
+  /**
+   * Everybody enters at fan level and the guide only ever shows the levels
+   * the visitor actually holds: a fan sees the fan view, a signed-in user
+   * adds the user view, and granted duties unlock their own level — nothing
+   * above it is ever hinted at. An explicit `?role=` param or a manual click
+   * wins, but can never exceed the visitor's real level.
+   */
+  useEffect(() => {
+    if (loading || userPicked.current) return
+    const detected = viewerRoleFor({ authenticated, role: globalRole, memberships })
+    const maxIndex = ROLES.findIndex((option) => option.id === detected)
+    const hasParam = searchParams.get('role') !== null
+    // Auth state resolves after mount, so the default tab must be synced in an effect.
+    // oxlint-disable-next-line react/set-state-in-effect -- see above
+     
+    setActiveRole((current) => {
+      const currentIndex = ROLES.findIndex((option) => option.id === current)
+      if (currentIndex > maxIndex) return detected
+      if (!hasParam && current === DEFAULT_ROLE) return detected
+      return current
+    })
+  }, [loading, authenticated, globalRole, memberships, searchParams])
+
+  /** Tabs the visitor may see: their own level and everything below it. */
+  const detectedRole: RoleId = loading
+    ? 'fan'
+    : viewerRoleFor({ authenticated, role: globalRole, memberships })
+  const viewerIndex = ROLES.findIndex((option) => option.id === detectedRole)
+  const visibleRoles = ROLES.slice(0, viewerIndex < 0 ? 1 : viewerIndex + 1)
+  const isStaff =
+    detectedRole === 'scout' || detectedRole === 'tournament_admin' || detectedRole === 'app_admin'
 
   const visitor = describeVisitor({ loading, isAppAdmin, memberships })
 
   const navigateTo = (role: RoleId) => {
+    userPicked.current = true
     const url = new URL(window.location.href)
     if (role === DEFAULT_ROLE) {
       url.searchParams.delete('role')
@@ -85,14 +121,14 @@ export function OnboardingGuideInner() {
     <div className="space-y-10">
       {visitor ? (
         <p className="rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-200">
-          {visitor} The tabs below are filtered for you — switch roles any time to preview the other views.
+          {visitor} This guide shows exactly what your account can do.
         </p>
       ) : null}
 
-      {/* Role tabs */}
+      {/* Role tabs — only the visitor's own level and below are ever listed. */}
       <div data-tour="guide-tabs" className="rounded-2xl border border-white/10 bg-[#1e293b] p-2">
         <div className="flex flex-wrap gap-1" role="tablist" aria-label="Onboarding roles">
-          {ROLES.map((option) => {
+          {visibleRoles.map((option) => {
             const selected = option.id === activeRole
             return (
               <button
@@ -121,6 +157,14 @@ export function OnboardingGuideInner() {
         <div>
           <h2 className="text-2xl font-extrabold tracking-tight">{role.label}</h2>
           <p className="mt-2 max-w-3xl text-gray-300">{role.summary}</p>
+          {isStaff ? (
+            <Link
+              href="/admin"
+              className="mt-4 inline-block rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Open your workspace →
+            </Link>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-6">

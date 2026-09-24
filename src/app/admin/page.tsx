@@ -29,6 +29,7 @@ import {
   type PlayerRow,
   type RosterDraftRow,
 } from '@/components/admin/RosterEditor'
+import { RoleTourLauncher } from '@/components/onboarding/RoleTourLauncher'
 
 const EMPTY_TEAM_FORM = {
   name: '',
@@ -507,6 +508,8 @@ const handleCreateFixture = async (event: React.FormEvent) => {
 
   return (
     <div className="min-h-screen bg-[#0f172a] pb-24 text-white">
+      {/* First visit at this level: introduce the staff member to their own controls. */}
+      <RoleTourLauncher minRole="scout" />
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0f172a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>

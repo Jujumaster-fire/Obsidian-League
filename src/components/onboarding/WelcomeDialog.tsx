@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAdminAuth } from '@/lib/use-admin-auth'
@@ -35,28 +35,22 @@ const CHOICES: Choice[] = [
     action: 'tour',
   },
   {
-    id: 'invite',
-    title: 'I have an invite link',
-    detail: 'Accept it to join a tournament with the duties you were offered.',
+    id: 'user',
+    title: 'Make it yours',
+    detail: 'Your signed-in tour of the app — follow your favourite teams and pick up where you left off.',
     role: 'user',
     href: '/login',
-    action: 'link',
-  },
-  {
-    id: 'staff',
-    title: 'I run or log a tournament',
-    detail: 'Register teams, schedule fixtures, run the live match console.',
-    role: 'tournament_admin',
-    href: '/admin',
     action: 'tour',
   },
 ]
 
 export function WelcomeDialog() {
   const { startTour, completeWelcome } = useOnboarding()
-  const { authenticated, isAppAdmin, memberships } = useAdminAuth()
+  const { loading, authenticated } = useAdminAuth()
   const [ready, setReady] = useState(false)
   const [choice, setChoice] = useState<Choice>(CHOICES[0])
+  /** Once the visitor picks a card by hand, auto-detection never overrides it. */
+  const userPicked = useRef(false)
 
   // Wait for the splash screen (2s) before covering the page with a modal.
   useEffect(() => {
@@ -64,13 +58,27 @@ export function WelcomeDialog() {
     return () => window.clearTimeout(timer)
   }, [])
 
-  if (!ready) return null
+  /**
+   * Everybody is welcomed as a fan; a signed-in account gets the signed-in
+   * tour. Staff duties are granted quietly by an admin — the people holding
+   * them are introduced to those controls when they open them, and nobody
+   * else ever learns the roles exist.
+   */
+  useEffect(() => {
+    if (loading || userPicked.current) return
+    const match = authenticated ? (CHOICES.find((option) => option.id === 'user') ?? CHOICES[0]) : CHOICES[0]
+    // Auth state resolves after mount, so the default choice must be synced in an effect.
+    // oxlint-disable-next-line react/set-state-in-effect -- see above
+     
+    setChoice(match)
+  }, [loading, authenticated])
 
-  const signedInAs = isAppAdmin
-    ? 'app admin'
-    : memberships.length > 0
-      ? `tournament member (${memberships.length} tournament${memberships.length > 1 ? 's' : ''})`
-      : null
+  if (!ready || loading) return null
+
+  /** Anonymous visitors see the fan card; signed-in accounts see theirs. */
+  const visibleChoices = authenticated
+    ? [CHOICES.find((option) => option.id === 'user') ?? CHOICES[0]]
+    : [CHOICES[0]]
 
   const confirm = () => {
     completeWelcome()
@@ -98,18 +106,19 @@ export function WelcomeDialog() {
               Welcome to Obsidian Elite
             </h2>
             <p className="text-xs text-gray-400">
-              {signedInAs ? `Signed in as ${signedInAs}.` : 'Tournaments, live scoring and news in one place.'}
+              Tournaments, live scoring and news in one place.
             </p>
           </div>
         </div>
 
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
-          Pick the closest match and we will give you a 60-second tour of the real controls — no
-          account needed to watch, an account to follow, and an invite to help run a tournament.
+          {authenticated
+            ? 'Welcome back — here is a 60-second tour of everything your account can do: live scores, fixtures, tables and news.'
+            : 'Let us show you around in 60 seconds — live scores, fixtures, tables, squads and news. No account needed to watch; sign in to follow your favourite teams.'}
         </p>
 
         <div className="mt-5 space-y-3" role="radiogroup" aria-label="Choose your starting point">
-          {CHOICES.map((option) => {
+          {visibleChoices.map((option) => {
             const selected = option.id === choice.id
             return (
               <button
@@ -117,7 +126,10 @@ export function WelcomeDialog() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => setChoice(option)}
+                onClick={() => {
+                  userPicked.current = true
+                  setChoice(option)
+                }}
                 className={
                   'w-full rounded-xl border p-4 text-left transition ' +
                   (selected
@@ -131,13 +143,6 @@ export function WelcomeDialog() {
             )
           })}
         </div>
-
-        {authenticated && !isAppAdmin && memberships.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-200">
-            Your account has no staff access yet. An invite link from a tournament admin grants the
-            exact duties you need.
-          </p>
-        ) : null}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <button

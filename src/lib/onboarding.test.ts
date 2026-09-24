@@ -11,6 +11,7 @@ import {
   dutyGlossaryForRole,
   featureById,
   featuresForRole,
+  pathMatches,
   reservedDutyTokens,
   roleById,
   stepsForCurrentLeg,
@@ -156,6 +157,61 @@ describe('onboarding — tour', () => {
     expect(stepsForCurrentLeg('fan', '/').every((step) => step.path === '/')).toBe(true)
     expect(stepsForCurrentLeg('scout', '/admin/match/abc')?.length).toBeGreaterThan(0)
     expect(stepsForCurrentLeg('fan', '/admin')).toEqual([])
+  })
+
+  it('resolves the scout console leg on both /scout/[id] and /admin/match/[id]', () => {
+    // `/scout/[id]` is the scout's own logging surface; tour steps declared
+    // for the console must resolve there without exposing the admin route.
+    expect(pathMatches('/scout/abc', '/admin/match')).toBe(true)
+    expect(pathMatches('/scout', '/admin/match')).toBe(false)
+    expect(pathMatches('/scout', '/admin')).toBe(false)
+    expect(stepsForCurrentLeg('scout', '/scout/abc')).toEqual(
+      stepsForCurrentLeg('scout', '/admin/match/abc'),
+    )
+  })
+})
+
+describe('onboarding — role secrecy', () => {
+  /**
+   * Binding product rule: fans and signed-in users must never see any hint
+   * that scout or admin roles exist. Staff discover their elevated surface
+   * contextually, by landing in their own UI.
+   */
+  it('offers only the fan and user choices in the welcome dialog', () => {
+    const dialog = readFileSync(
+      join(process.cwd(), 'src/components/onboarding/WelcomeDialog.tsx'),
+      'utf8',
+    )
+    expect(dialog).toContain("id: 'fan'")
+    expect(dialog).toContain("id: 'user'")
+    for (const staffRole of ["'scout'", "'tournament_admin'", "'app_admin'"]) {
+      expect(dialog, `welcome dialog must not mention ${staffRole}`).not.toContain(
+        `id: ${staffRole}`,
+      )
+    }
+    // No role detection or staff-hint machinery may leak into the dialog.
+    expect(dialog).not.toContain('viewerRoleFor')
+  })
+
+  it('keeps staff tour anchors and routes out of the fan/user journeys', () => {
+    for (const id of ['fan', 'user'] as RoleId[]) {
+      for (const step of roleById(id).journey) {
+        expect(step.href ?? '/', `${id} journey href`).not.toMatch(/^\/(admin|scout)/)
+      }
+      for (const feature of featuresForRole(id)) {
+        expect(feature.route, `${id} feature ${feature.id}`).not.toMatch(/^\/(admin|scout)/)
+      }
+    }
+  })
+
+  it('starts staff tours only inside their own surfaces', () => {
+    for (const step of TOUR_STEPS) {
+      const staffOnly =
+        step.roles.every((role) => role === 'scout' || role === 'tournament_admin' || role === 'app_admin')
+      if (staffOnly) {
+        expect(step.path, `${step.id} path`).toMatch(/^\/admin/)
+      }
+    }
   })
 })
 

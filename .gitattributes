@@ -1,0 +1,10 @@
+# Line endings: the db-setup contract test and the smoke script assert
+# multi-line SQL with \n, so SQL must stay LF on every platform.
+* text=auto
+*.sql text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf

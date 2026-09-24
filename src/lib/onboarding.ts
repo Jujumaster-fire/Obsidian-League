@@ -1109,8 +1109,16 @@ export function roleById(id: RoleId): RoleGuide {
 
 /** `'/onboarding'` matches itself; `'/'` only matches the exact home path. */
 export function pathMatches(pathname: string, path: string): boolean {
-  if (path === '/') return pathname === '/'
-  return pathname === path || pathname.startsWith(`${path}/`)
+  /**
+   * `/scout/[id]` is the scout's own logging surface — the same console the
+   * admin side serves at `/admin/match/[id]` — so a tour step declared for
+   * the console must match both routes.
+   */
+  const normalized = pathname.startsWith('/scout/')
+    ? `/admin/match${pathname.slice('/scout'.length)}`
+    : pathname
+  if (path === '/') return normalized === '/'
+  return normalized === path || normalized.startsWith(`${path}/`)
 }
 
 /** Steps whose page prefix matches the current pathname, in declared order. */
@@ -1156,4 +1164,49 @@ export function tourStepById(id: string): TourStep {
   const step = TOUR_BY_ID.get(id)
   if (!step) throw new Error(`Unknown tour step: ${id}`)
   return step
+}
+
+/* -------------------------------------------------------------------------- */
+/* Viewer role detection                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** The slice of `useAdminAuth()` state the detector needs (kept structural for tests). */
+export interface ViewerAuthLike {
+  authenticated: boolean
+  /** Global `user_roles.role` (app_admin | tournament_admin | user) or null. */
+  role: string | null
+  memberships: { duties: string[] | null }[]
+}
+
+/**
+ * Duties that mark tournament management rather than match-day logging.
+ * `score` / `clock` and the stat/event/fixture tokens stay scout-level.
+ */
+const MANAGEMENT_DUTIES: readonly string[] = [
+  WILDCARD_DUTY,
+  POSTS_DUTY,
+  ROSTER_DUTY,
+  ENTRY_DUTY,
+  LINEUP_DUTY,
+]
+
+/**
+ * What the current visitor actually is, in onboarding terms.
+ *
+ * Everybody is treated as a fan on their first visit; signing in (or up)
+ * makes them a user; granted duties promote them to scout (logging tokens
+ * such as `score`, `clock`, `stat:<key>`, `event:<type>`, `fixture:<uuid>`)
+ * or tournament admin (a management duty or the wildcard); the global
+ * `user_roles` row tops the hierarchy for tournament admins and app admins.
+ */
+export function viewerRoleFor(auth: ViewerAuthLike): RoleId {
+  if (!auth.authenticated) return 'fan'
+  if (auth.role === 'app_admin') return 'app_admin'
+  if (auth.role === 'tournament_admin') return 'tournament_admin'
+
+  const duties = auth.memberships.flatMap((membership) => membership.duties ?? [])
+  if (duties.length === 0) return 'user'
+
+  const hasManagement = duties.some((duty) => MANAGEMENT_DUTIES.includes(duty))
+  return hasManagement ? 'tournament_admin' : 'scout'
 }

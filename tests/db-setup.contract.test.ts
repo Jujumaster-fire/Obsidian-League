@@ -15,7 +15,9 @@ import { describe, expect, it } from 'vitest'
  */
 
 const root = process.cwd()
-const sql = readFileSync(join(root, 'supabase', 'db-setup.sql'), 'utf8')
+// Normalize to LF: db-setup.sql is checked out with CRLF on Windows
+// (core.autocrlf), and multi-line assertions below are line-ending sensitive.
+const sql = readFileSync(join(root, 'supabase', 'db-setup.sql'), 'utf8').replace(/\r\n/g, '\n')
 
 const count = (needle: string) => sql.split(needle).length - 1
 
