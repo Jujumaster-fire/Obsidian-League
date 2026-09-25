@@ -281,7 +281,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
     const lineupRes = await supabase
       .from('fixture_lineups')
-      .select('id, slot, player_id, athlete_id, role, x, y, is_captain')
+      .select('id, team_id, slot, player_id, athlete_id, role, x, y, is_captain')
       .eq('fixture_id', id)
       .order('slot', { ascending: true })
     if (!lineupRes.error && Array.isArray(lineupRes.data)) {
@@ -1304,14 +1304,14 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
   const fieldPlayerOptions = newEvent.team_id
     ? (() => {
-        const teamLineups = lineups.filter((slot) => slot.teamId === newEvent.team_id)
+        const teamLineups = lineups.filter((slot) => slot.player_id && players.some(p => p.id === slot.player_id && p.team_id === newEvent.team_id))
         return squadForEvent.filter((p) => teamLineups.some((slot) => slot.player_id === p.id))
       })()
     : squadForEvent
 
   const benchPlayerOptions = newEvent.team_id
     ? (() => {
-        const teamLineups = lineups.filter((slot) => slot.teamId === newEvent.team_id)
+        const teamLineups = lineups.filter((slot) => slot.player_id && players.some(p => p.id === slot.player_id && p.team_id === newEvent.team_id))
         return squadForEvent.filter((p) => !teamLineups.some((slot) => slot.player_id === p.id))
       })()
     : squadForEvent
