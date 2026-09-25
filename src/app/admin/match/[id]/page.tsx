@@ -17,7 +17,6 @@ import {
 } from '@/components/admin/AdminWidgets'
 import {
   canEditRules,
-  canLogEventTypes,
   canRecordStatKeys,
   canWriteClock,
   canWriteLineup,
@@ -30,40 +29,41 @@ import {
   parseSportArrangement,
   resolveFixtureRules,
   scoreLabel,
-  type EventOption,
   type SportArrangement,
   type StatInput,
 } from '@/lib/sports'
 
-type ScopeId = 'score' | 'clock' | 'stats' | 'events' | 'timeline' | 'rules' | 'lineup'
+type ScopeId = 'score' | 'clock' | 'stats' | 'timeline' | 'rules' | 'lineup'
 
 type Side = 'home' | 'away'
 type Stats = Record<Side, Record<string, number | undefined>> & {
   added_minutes?: number
 }
 
-const EVENT_TYPES: EventOption[] = [
-  { type: 'goal', label: 'Goal' },
-  { type: 'own_goal', label: 'Own goal' },
-  { type: 'penalty_goal', label: 'Penalty goal' },
+export interface CustomEventCategory {
+  key: string
+  label: string
+}
+
+const EVENT_CATEGORIES: CustomEventCategory[] = [
+  { key: 'goal', label: 'Goal' },
+  { key: 'card_punishment', label: 'Card punishment' },
+  { key: 'foul', label: 'Foul' },
+  { key: 'corner', label: 'Corner' },
+  { key: 'penalty', label: 'Penalty' },
+  { key: 'free_kick', label: 'Free kick' },
+  { key: 'throw_in', label: 'Throw-in' },
+  { key: 'match_paused', label: 'Match paused' },
+  { key: 'half_time', label: 'Half-time' },
+  { key: 'full_time', label: 'Full-time' },
+  { key: 'substitution', label: 'Substitutions' },
+]
+
+const CARD_PUNISHMENTS = [
   { type: 'yellow_card', label: 'Yellow card' },
   { type: 'red_card', label: 'Red card' },
-  { type: 'substitution', label: 'Substitution' },
-  { type: 'corner', label: 'Corner' },
-  { type: 'free_kick', label: 'Free kick' },
-  { type: 'penalty_missed', label: 'Penalty missed' },
-  { type: 'injury', label: 'Injury' },
-  { type: 'water_break', label: 'Water break' },
-  { type: 'half_time_whistle', label: 'Half time' },
-  { type: 'full_time_whistle', label: 'Full time' },
-  { type: 'green_card', label: 'Green card (hockey)' },
-  { type: 'penalty_corner', label: 'Penalty corner (hockey)' },
-  { type: 'stroke', label: 'Stroke (hockey shootout)' },
-  { type: 'suspension', label: 'Suspension (2 min)' },
-  { type: 'timeout', label: 'Timeout' },
-  { type: 'disqualification', label: 'Disqualification' },
-  { type: 'kick_off', label: 'Kick off' },
-  { type: 'penalty', label: 'Penalty (handball/basketball)' },
+  { type: 'green_card', label: 'Green card' },
+  { type: 'suspension', label: '2-Min Suspension' },
 ]
 
 interface MatchEvent {
@@ -127,7 +127,8 @@ interface FixtureDetail {
 const EMPTY_STATS: Stats = { home: {}, away: {} }
 
 const emptyEvent = {
-  event_type: 'goal',
+  category: 'goal',
+  card_type: 'yellow_card',
   team_id: '',
   player_name: '',
   assist_name: '',
@@ -721,6 +722,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       return
     }
 
+    const finalEventType = newEvent.category === 'card_punishment' ? newEvent.card_type : newEvent.category
+
     const teamId = newEvent.team_id || null
     const squad = teamId ? players.filter((player) => player.team_id === teamId) : []
     const scorer = squad.find((player) => player.name === newEvent.player_name.trim())
@@ -730,13 +733,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
         .filter(Boolean)
         .join(' • ') || null
 
-    if (!(await claimScope(`event:${newEvent.event_type}`))) return
+    if (!(await claimScope(`event:${finalEventType}`))) return
     setBusy(true)
 
     const insertPayload = {
       fixture_id: id,
       tournament_id: fixture?.tournament_id ?? null,
-      event_type: newEvent.event_type,
+      event_type: finalEventType,
       team_id: teamId,
       player_id: scorer?.id ?? null,
       player_name: newEvent.player_name.trim() || null,
@@ -781,7 +784,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
     setNewEvent((current) => ({
       ...emptyEvent,
-      event_type: current.event_type,
+      category: current.category,
+      card_type: current.card_type,
       team_id: current.team_id,
       minute: String(minute),
     }))
@@ -850,7 +854,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       }),
     [sport, fixture, rulesOverride],
   )
-  const { arrangement, statOptions, eventOptions, isOverride, allowNegativeScore } = resolvedRules
+  const { arrangement, statOptions, isOverride, allowNegativeScore } = resolvedRules
 
   const dutyContext: DutyContext = useMemo(() => {
     const membership = memberships.find((row) => row.tournament_id === fixture?.tournament_id)
@@ -868,10 +872,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const statAccess = useMemo(
     () => isAppAdmin ? Object.fromEntries(statOptions.map((o) => [o.key, true])) : canRecordStatKeys(dutyContext, statOptions.map((option) => option.key)),
     [dutyContext, statOptions, isAppAdmin],
-  )
-  const eventAccess = useMemo(
-    () => isAppAdmin ? Object.fromEntries(eventOptions.map((o) => [o.type, true])) : canLogEventTypes(dutyContext, eventOptions.map((option) => option.type)),
-    [dutyContext, eventOptions, isAppAdmin],
   )
   const statGroups = useMemo(() => groupStatOptions(statOptions), [statOptions])
 
@@ -895,13 +895,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
         enabled: statOptions.some((option) => statAccess[option.key]) || canScore,
         lockedReason: 'Your duties do not cover any stat on this match.',
       },
-      {
-        id: 'events',
-        label: 'Events',
-        enabled: eventOptions.some((option) => eventAccess[option.type]) || canScore,
-        lockedReason: 'Your duties do not cover any event type on this match.',
-      },
-      { id: 'timeline', label: 'Timeline', enabled: true },
+      { id: 'timeline', label: 'Timeline & Events', enabled: true },
       {
         id: 'lineup',
         label: 'Lineup',
@@ -916,7 +910,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       },
     ]
     return list
-  }, [canScore, canClock, canRules, canLineup, statOptions, statAccess, eventOptions, eventAccess])
+  }, [canScore, canClock, canRules, canLineup, statOptions, statAccess])
 
   const activeScope = useMemo(() => {
     if (availableScopes.some((scope) => scope.id === rawActiveScope && scope.enabled)) {
@@ -924,8 +918,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     }
     return availableScopes.find((scope) => scope.enabled)?.id ?? 'score'
   }, [availableScopes, rawActiveScope])
-
-  const eventFormOptions = eventOptions.length > 0 ? eventOptions : EVENT_TYPES
 
   const [ruleDraft, setRuleDraft] = useState({ periods: '', period_minutes: '', break_minutes: '' })
   const [rulesSaving, setRulesSaving] = useState(false)
@@ -1215,7 +1207,6 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     ? players.filter((player) => player.team_id === newEvent.team_id)
     : players
 
-  const loggableEventOptions = eventFormOptions.filter((option) => eventAccess[option.type])
   const writableStatGroups = statGroups
     .map((group) => ({
       ...group,
@@ -1701,7 +1692,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
           </section>
         )}
 
-        {activeScope === 'timeline' || activeScope === 'events' ? (
+        {activeScope === 'timeline' ? (
           <div data-tour="console-timeline" className="grid grid-cols-1 gap-8 lg:grid-cols-2">
             <section className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
               <h2 className="mb-4 text-lg font-semibold">Timeline ({events.length})</h2>
@@ -1742,18 +1733,43 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
               <h2 className="mb-4 text-lg font-semibold">Log an event</h2>
               <form onSubmit={logEvent} className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Event type">
+                  <Field label="Event category">
                     <SelectInput
-                      value={loggableEventOptions.some((option) => option.type === newEvent.event_type)
-                        ? newEvent.event_type
-                        : loggableEventOptions[0]?.type ?? 'goal'}
-                      options={loggableEventOptions.map((option) => ({
-                        value: option.type,
-                        label: option.label.replace(/\b\w/g, (letter) => letter.toUpperCase()),
+                      value={newEvent.category}
+                      options={EVENT_CATEGORIES.map((cat) => ({
+                        value: cat.key,
+                        label: cat.label,
                       }))}
-                      onValueChange={(value) => setNewEvent({ ...newEvent, event_type: value })}
+                      onValueChange={(value) => setNewEvent({ ...newEvent, category: value })}
                     />
                   </Field>
+
+                  {newEvent.category === 'card_punishment' ? (
+                    <Field label="Card Punishment Type">
+                      <SelectInput
+                        value={newEvent.card_type}
+                        options={CARD_PUNISHMENTS.map((card) => ({
+                          value: card.type,
+                          label: card.label,
+                        }))}
+                        onValueChange={(value) => setNewEvent({ ...newEvent, card_type: value })}
+                      />
+                    </Field>
+                  ) : (
+                    <Field label="Minute">
+                      <input
+                        type="number"
+                        min={0}
+                        max={130}
+                        className={adminInputClass}
+                        value={newEvent.minute}
+                        onChange={(event) => setNewEvent({ ...newEvent, minute: event.target.value })}
+                      />
+                    </Field>
+                  )}
+                </div>
+
+                {newEvent.category === 'card_punishment' && (
                   <Field label="Minute">
                     <input
                       type="number"
@@ -1764,7 +1780,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                       onChange={(event) => setNewEvent({ ...newEvent, minute: event.target.value })}
                     />
                   </Field>
-                </div>
+                )}
 
                 <Field label="Team">
                   <SelectInput
