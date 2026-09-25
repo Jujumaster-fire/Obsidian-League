@@ -172,6 +172,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const [addedMinutes, setAddedMinutes] = useState(0)
+  const [customStoppageInput, setCustomStoppageInput] = useState('')
   const [homeScore, setHomeScore] = useState(0)
   const [awayScore, setAwayScore] = useState(0)
   const [stats, setStats] = useState<Stats>(EMPTY_STATS)
@@ -585,6 +586,16 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     setStats((current) => ({ ...current, added_minutes: addMins }))
     const ok = await persistClock(status, minute, elapsedSeconds, timerStartedAt, addMins)
     if (ok) notify('success', `Stoppage time set to +${addMins} mins.`)
+  }
+
+  const handleApplyCustomStoppage = () => {
+    const parsed = Number.parseInt(customStoppageInput, 10)
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > 30) {
+      notify('error', 'Enter a stoppage time between 0 and 30 minutes.')
+      return
+    }
+    setCustomStoppageInput('')
+    void setStoppageTime(parsed)
   }
 
   const startClock = async (nextStatus: string, nextMinute: number) => {
@@ -1078,7 +1089,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
   const renderFallbackClockControls = () => {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         <div className="flex flex-wrap gap-2">
           {status === 'scheduled' && (
             <button
@@ -1097,7 +1108,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
               onClick={() => void endClock('half_time', 45)}
               className={adminSubtleButton}
             >
-              End 1st half
+              End 1st half (HT)
             </button>
           )}
           {status === 'half_time' && (
@@ -1124,13 +1135,13 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
             <button
               type="button"
               disabled={busy}
-              onClick={() => void startClock('in_progress', minute)}
+              onClick={() => void startClock(minute >= 90 ? 'extra_time' : 'in_progress', minute)}
               className={adminPrimaryButton}
             >
               Resume
             </button>
           )}
-          {isRunning && minute >= 45 && (
+          {isRunning && minute >= 45 && minute < 90 && (
             <button
               type="button"
               disabled={busy}
@@ -1140,59 +1151,107 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
               End 2nd half (FT)
             </button>
           )}
-          {status === 'full_time' && homeScore === awayScore && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void startClock('extra_time', 90)}
-              className={adminPrimaryButton}
-            >
-              Start extra time
-            </button>
-          )}
-          {status === 'extra_time' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void endClock('full_time', 120)}
-              className={adminSubtleButton}
-            >
-              End after extra time
-            </button>
+
+          {/* Knockout Stage Extra Time (3rd & 4th Periods) */}
+          {(status === 'full_time' || (status === 'paused' && minute >= 90) || (isRunning && minute >= 90)) && (
+            <>
+              {(status === 'full_time' || (status === 'paused' && minute === 90)) && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void startClock('extra_time', 90)}
+                  className={adminPrimaryButton}
+                >
+                  Start 3rd Period (ET 1st Half)
+                </button>
+              )}
+              {isRunning && minute >= 90 && minute < 105 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void endClock('extra_time', 105)}
+                  className={adminSubtleButton}
+                >
+                  End 3rd Period (ET HT at 105&apos;)
+                </button>
+              )}
+              {(status === 'paused' && minute === 105) && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void startClock('extra_time', 105)}
+                  className={adminPrimaryButton}
+                >
+                  Start 4th Period (ET 2nd Half)
+                </button>
+              )}
+              {isRunning && minute >= 105 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void endClock('full_time', 120)}
+                  className={adminSubtleButton}
+                >
+                  End 4th Period (ET FT at 120&apos;)
+                </button>
+              )}
+            </>
           )}
         </div>
 
-        {/* Stoppage Time / Extra Minutes Quick Controls */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-          <span className="text-xs font-semibold text-gray-400 mr-2">
+        {/* Stoppage Time / Extra Minutes Quick & Manual Controls */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
+          <span className="text-xs font-semibold text-gray-400">
             Add Stoppage Time:
           </span>
-          {[1, 2, 3, 5].map((mins) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {[1, 2, 3, 5].map((mins) => (
+              <button
+                key={mins}
+                type="button"
+                disabled={busy}
+                onClick={() => void setStoppageTime(mins)}
+                className={
+                  'px-3 py-1.5 text-xs font-bold rounded-lg border transition ' +
+                  (addedMinutes === mins
+                    ? 'bg-amber-500 text-black border-amber-400'
+                    : 'bg-white/5 text-amber-300 border-amber-500/30 hover:bg-amber-500/20')
+                }
+              >
+                +{mins} min
+              </button>
+            ))}
+            {addedMinutes > 0 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setStoppageTime(0)}
+                className="px-2 py-1 text-xs text-gray-400 hover:text-white underline"
+              >
+                Clear (+0)
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <input
+              type="number"
+              min={0}
+              max={30}
+              placeholder="e.g. 7"
+              value={customStoppageInput}
+              onChange={(e) => setCustomStoppageInput(e.target.value)}
+              className={adminInputClass + ' w-20 text-xs py-1'}
+            />
             <button
-              key={mins}
               type="button"
               disabled={busy}
-              onClick={() => void setStoppageTime(mins)}
-              className={
-                'px-3 py-1.5 text-xs font-bold rounded-lg border transition ' +
-                (addedMinutes === mins
-                  ? 'bg-amber-500 text-black border-amber-400'
-                  : 'bg-white/5 text-amber-300 border-amber-500/30 hover:bg-amber-500/20')
-              }
+              onClick={handleApplyCustomStoppage}
+              className={adminSubtleButton + ' text-xs py-1'}
             >
-              +{mins} min
+              Set Mins
             </button>
-          ))}
-          {addedMinutes > 0 && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void setStoppageTime(0)}
-              className="px-2.5 py-1.5 text-xs text-gray-400 hover:text-white underline"
-            >
-              Clear (+0)
-            </button>
-          )}
+          </div>
         </div>
       </div>
     )
