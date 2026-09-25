@@ -122,6 +122,7 @@ interface FixtureDetail {
   stats: (Stats & { elapsed_seconds?: number; timer_started_at?: string | null; added_minutes?: number }) | null
   home_team: { id: string; name: string; short_name: string | null; roster: string | null } | null
   away_team: { id: string; name: string; short_name: string | null; roster: string | null } | null
+  article_md?: string | null
 }
 
 const EMPTY_STATS: Stats = { home: {}, away: {} }
@@ -132,6 +133,8 @@ const emptyEvent = {
   team_id: '',
   player_name: '',
   assist_name: '',
+  player_in: '',
+  player_out: '',
   minute: '',
   details: '',
 }
@@ -156,6 +159,8 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
   const [loggers, setLoggers] = useState<LoggerRow[]>([])
   const [lineups, setLineups] = useState<FormationSlot[]>([])
   const [lineupSaving, setLineupSaving] = useState(false)
+  const [articleMd, setArticleMd] = useState('')
+  const [articleSaving, setArticleSaving] = useState(false)
   const [runtime, setRuntime] = useState<ConsoleRuntime>({
     hasLoggersRpc: false,
     hasRecordEventRpc: false,
@@ -210,7 +215,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     const { data, error } = await supabase
       .from('fixtures')
       .select(
-        'id, status, current_minute, home_score, away_score, tournament_id, sport_id, rules_override, stats, home_team:home_team_id(id, name, short_name, roster), away_team:away_team_id(id, name, short_name, roster)',
+        'id, status, current_minute, home_score, away_score, tournament_id, sport_id, rules_override, stats, article_md, home_team:home_team_id(id, name, short_name, roster), away_team:away_team_id(id, name, short_name, roster)',
       )
       .eq('id', id)
       .maybeSingle()
@@ -224,6 +229,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     const row = data as unknown as FixtureDetail | null
     setFixture(row)
     setRulesOverride(row?.rules_override ?? {})
+    setArticleMd(row?.article_md ?? '')
 
     if (row) {
       setStatus(row.status ?? 'scheduled')
@@ -275,7 +281,7 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
     const lineupRes = await supabase
       .from('fixture_lineups')
-      .select('id, slot, player_id, athlete_id, role, x, y, is_captain')
+      .select('id, team_id, slot, player_id, athlete_id, role, x, y, is_captain')
       .eq('fixture_id', id)
       .order('slot', { ascending: true })
     if (!lineupRes.error && Array.isArray(lineupRes.data)) {
@@ -402,6 +408,9 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       if (typeof row.current_minute === 'number') {
         setMinute(row.current_minute)
         if (!timerStartedAt) setElapsedSeconds(row.current_minute * 60)
+      }
+      if (typeof row.article_md === 'string') {
+        setArticleMd(row.article_md)
       }
       const statsValue = row.stats as Record<string, unknown> | null | undefined
       if (statsValue && typeof statsValue === 'object') {
@@ -546,6 +555,21 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
   }, [timerStartedAt, status])
+
+  const saveArticle = async () => {
+    setArticleSaving(true)
+    const { error } = await supabase
+      .from('fixtures')
+      .update({ article_md: articleMd.trim() || null })
+      .eq('id', id)
+    setArticleSaving(false)
+
+    if (error) {
+      notify('error', `Could not save article: ${error.message}`)
+      return
+    }
+    notify('success', 'Match insights article saved successfully.')
+  }
 
   const persistClock = async (
     nextStatus: string,
@@ -737,12 +761,24 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
 
     const teamId = newEvent.team_id || null
     const squad = teamId ? players.filter((player) => player.team_id === teamId) : []
-    const scorer = squad.find((player) => player.name === newEvent.player_name.trim())
-    const assist = squad.find((player) => player.name === newEvent.assist_name.trim())
-    const details =
-      [newEvent.assist_name.trim() ? `Assist: ${newEvent.assist_name.trim()}` : '', newEvent.details.trim()]
-        .filter(Boolean)
-        .join(' • ') || null
+
+    let playerName = newEvent.player_name.trim()
+    let details = newEvent.details.trim()
+
+    if (newEvent.category === 'substitution') {
+      const pIn = newEvent.player_in.trim()
+      const pOut = newEvent.player_out.trim()
+      playerName = pIn ? `In: ${pIn}` : playerName
+      const subDetails = `Out: ${pOut || 'N/A'}${pIn ? ` • In: ${pIn}` : ''}`
+      details = details ? `${subDetails} • ${details}` : subDetails
+    } else {
+      details = [
+        newEvent.assist_name.trim() ? `Assist: ${newEvent.assist_name.trim()}` : '',
+        details,
+      ].filter(Boolean).join(' • ')
+    }
+
+    const scorer = squad.find((player) => player.name === playerName)
 
     if (!(await claimScope(`event:${finalEventType}`))) return
     setBusy(true)
@@ -753,10 +789,10 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
       event_type: finalEventType,
       team_id: teamId,
       player_id: scorer?.id ?? null,
-      player_name: newEvent.player_name.trim() || null,
-      assist_player_id: assist?.id ?? null,
+      player_name: playerName || null,
+      assist_player_id: null,
       minute: minuteValue,
-      details,
+      details: details || null,
     }
 
     let logged = false
@@ -1266,6 +1302,20 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
     ? players.filter((player) => player.team_id === newEvent.team_id)
     : players
 
+  const fieldPlayerOptions = newEvent.team_id
+    ? (() => {
+        const teamLineups = lineups.filter((slot) => slot.player_id && players.some(p => p.id === slot.player_id && p.team_id === newEvent.team_id))
+        return squadForEvent.filter((p) => teamLineups.some((slot) => slot.player_id === p.id))
+      })()
+    : squadForEvent
+
+  const benchPlayerOptions = newEvent.team_id
+    ? (() => {
+        const teamLineups = lineups.filter((slot) => slot.player_id && players.some(p => p.id === slot.player_id && p.team_id === newEvent.team_id))
+        return squadForEvent.filter((p) => !teamLineups.some((slot) => slot.player_id === p.id))
+      })()
+    : squadForEvent
+
   const writableStatGroups = statGroups
     .map((group) => ({
       ...group,
@@ -1660,93 +1710,118 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
         )}
 
         {activeScope === 'lineup' && (
-          <section data-tour="console-lineup" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
-            <h2 className="mb-1 text-lg font-semibold">Lineups &amp; formation</h2>
-            <p className="mb-4 text-xs text-gray-500">
-              Drag tokens to set each player&apos;s position. Coordinates are stored on{' '}
-              <code>fixture_lineups</code> and streamed live to the public page.
-            </p>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {(['home', 'away'] as const).map((side) => {
-                const team = side === 'home' ? fixture.home_team : fixture.away_team
-                if (!team) return null
-                const slots = side === 'home' ? homeSlots : awaySlots
-                const squad = players.filter((player) => player.team_id === team.id)
-                const save = (args: {
-                  slot: FormationSlot
-                  x?: number
-                  y?: number
-                  role?: string | null
-                  isCaptain?: boolean
-                }) =>
-                  void writeLineup({
-                    teamId: team.id,
-                    slot: args.slot.slot,
-                    x: args.x ?? args.slot.x,
-                    y: args.y ?? args.slot.y,
-                    playerId: args.slot.player_id,
-                    athleteId: args.slot.athlete_id,
-                    role: args.role !== undefined ? args.role : args.slot.role,
-                    isCaptain: args.isCaptain ?? args.slot.is_captain,
-                  })
-                return (
-                  <div key={side} className="space-y-3">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-300">
-                      {team.name}
-                    </h3>
-                    <FormationCanvas
-                      court={lineupCourt}
-                      slots={slots}
-                      teamName={team.name}
-                      accent={side}
-                      players={squad}
-                      saving={lineupSaving}
-                      onMove={(slot, x, y) => {
-                        setLineups((current) =>
-                          current.map((entry) => (entry.id === slot.id ? { ...entry, x, y } : entry)),
-                        )
-                        save({ slot, x, y })
-                      }}
-                      onAdd={(playerId, x, y) =>
-                        void writeLineup({
-                          teamId: team.id,
-                          slot: nextSlotFor(team.id),
-                          x,
-                          y,
-                          playerId,
-                          isCaptain: false,
-                        })
-                      }
-                      onRemove={(slot) => {
-                        if (!slot.id) return
-                        void writeLineup({
-                          teamId: team.id,
-                          slot: slot.slot,
-                          playerId: slot.player_id,
-                          remove: true,
-                          id: slot.id,
-                        })
-                      }}
-                      onToggleCaptain={(slot) => {
-                        setLineups((current) =>
-                          current.map((entry) =>
-                            entry.id === slot.id ? { ...entry, is_captain: !entry.is_captain } : entry,
-                          ),
-                        )
-                        save({ slot, isCaptain: !slot.is_captain })
-                      }}
-                      onRoleChange={(slot, role) => {
-                        setLineups((current) =>
-                          current.map((entry) =>
-                            entry.id === slot.id ? { ...entry, role: role || null } : entry,
-                          ),
-                        )
-                        save({ slot, role })
-                      }}
-                    />
-                  </div>
-                )
-              })}
+          <section data-tour="console-lineup" className="rounded-xl border border-white/5 bg-[#1e293b] p-6 space-y-8">
+            <div>
+              <h2 className="mb-1 text-lg font-semibold">Lineups &amp; formation</h2>
+              <p className="mb-4 text-xs text-gray-500">
+                Drag tokens to set each player&apos;s position. Coordinates are stored on{' '}
+                <code>fixture_lineups</code> and streamed live to the public page.
+              </p>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {(['home', 'away'] as const).map((side) => {
+                  const team = side === 'home' ? fixture.home_team : fixture.away_team
+                  if (!team) return null
+                  const slots = side === 'home' ? homeSlots : awaySlots
+                  const squad = players.filter((player) => player.team_id === team.id)
+                  const save = (args: {
+                    slot: FormationSlot
+                    x?: number
+                    y?: number
+                    role?: string | null
+                    isCaptain?: boolean
+                  }) =>
+                    void writeLineup({
+                      teamId: team.id,
+                      slot: args.slot.slot,
+                      x: args.x ?? args.slot.x,
+                      y: args.y ?? args.slot.y,
+                      playerId: args.slot.player_id,
+                      athleteId: args.slot.athlete_id,
+                      role: args.role !== undefined ? args.role : args.slot.role,
+                      isCaptain: args.isCaptain ?? args.slot.is_captain,
+                    })
+                  return (
+                    <div key={side} className="space-y-3">
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-gray-300">
+                        {team.name}
+                      </h3>
+                      <FormationCanvas
+                        court={lineupCourt}
+                        slots={slots}
+                        teamName={team.name}
+                        accent={side}
+                        players={squad}
+                        saving={lineupSaving}
+                        onMove={(slot, x, y) => {
+                          setLineups((current) =>
+                            current.map((entry) => (entry.id === slot.id ? { ...entry, x, y } : entry)),
+                          )
+                          save({ slot, x, y })
+                        }}
+                        onAdd={(playerId, x, y) =>
+                          void writeLineup({
+                            teamId: team.id,
+                            slot: nextSlotFor(team.id),
+                            x,
+                            y,
+                            playerId,
+                            isCaptain: false,
+                          })
+                        }
+                        onRemove={(slot) => {
+                          if (!slot.id) return
+                          void writeLineup({
+                            teamId: team.id,
+                            slot: slot.slot,
+                            playerId: slot.player_id,
+                            remove: true,
+                            id: slot.id,
+                          })
+                        }}
+                        onToggleCaptain={(slot) => {
+                          setLineups((current) =>
+                            current.map((entry) =>
+                              entry.id === slot.id ? { ...entry, is_captain: !entry.is_captain } : entry,
+                            ),
+                          )
+                          save({ slot, isCaptain: !slot.is_captain })
+                        }}
+                        onRoleChange={(slot, role) => {
+                          setLineups((current) =>
+                            current.map((entry) =>
+                              entry.id === slot.id ? { ...entry, role: role || null } : entry,
+                            ),
+                          )
+                          save({ slot, role })
+                        }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Match Article / Insights Writer */}
+            <div className="border-t border-white/10 pt-6">
+              <h3 className="text-lg font-bold mb-2">Match Report &amp; Insights Article</h3>
+              <p className="text-xs text-gray-400 mb-4">
+                Write match insights, tactical summaries, or match reports in Markdown. These insights render directly on the live match overview tab.
+              </p>
+              <textarea
+                rows={8}
+                value={articleMd}
+                onChange={(e) => setArticleMd(e.target.value)}
+                placeholder="# Match Summary&#10;&#10;An intense first half ended 1-1 with both teams pressing high..."
+                className={adminInputClass + ' w-full font-mono text-sm'}
+              />
+              <button
+                type="button"
+                disabled={articleSaving}
+                onClick={() => void saveArticle()}
+                className={adminPrimaryButton + ' mt-3'}
+              >
+                {articleSaving ? 'Saving Article…' : 'Save Insights Article'}
+              </button>
             </div>
           </section>
         )}
@@ -1849,45 +1924,86 @@ export default function LiveMatchManager({ params }: { params: Promise<{ id: str
                   />
                 </Field>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Player">
-                    <input
-                      type="text"
-                      list="match-squad"
-                      className={adminInputClass}
-                      placeholder="Type or pick a squad member"
-                      value={newEvent.player_name}
-                      onChange={(event) =>
-                        setNewEvent({ ...newEvent, player_name: event.target.value })
-                      }
-                    />
-                    <datalist id="match-squad">
-                      {squadForEvent.map((player) => (
-                        <option key={player.id} value={player.name} />
-                      ))}
-                    </datalist>
-                  </Field>
-                  <Field label="Assist (goals only)">
-                    <input
-                      type="text"
-                      list="match-squad-assist"
-                      className={adminInputClass}
-                      value={newEvent.assist_name}
-                      onChange={(event) =>
-                        setNewEvent({ ...newEvent, assist_name: event.target.value })
-                      }
-                    />
-                    <datalist id="match-squad-assist">
-                      {squadForEvent.map((player) => (
-                        <option key={player.id} value={player.name} />
-                      ))}
-                    </datalist>
-                  </Field>
-                </div>
+                {newEvent.category === 'substitution' ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field label="Player Out (On-Field)">
+                      <input
+                        type="text"
+                        list="match-squad-field"
+                        className={adminInputClass}
+                        placeholder="Select on-field player"
+                        value={newEvent.player_out}
+                        onChange={(event) =>
+                          setNewEvent({ ...newEvent, player_out: event.target.value })
+                        }
+                      />
+                      <datalist id="match-squad-field">
+                        {fieldPlayerOptions.map((player) => (
+                          <option key={player.id} value={player.name} />
+                        ))}
+                      </datalist>
+                    </Field>
+
+                    <Field label="Player In (Bench)">
+                      <input
+                        type="text"
+                        list="match-squad-bench"
+                        className={adminInputClass}
+                        placeholder="Select bench player"
+                        value={newEvent.player_in}
+                        onChange={(event) =>
+                          setNewEvent({ ...newEvent, player_in: event.target.value })
+                        }
+                      />
+                      <datalist id="match-squad-bench">
+                        {benchPlayerOptions.map((player) => (
+                          <option key={player.id} value={player.name} />
+                        ))}
+                      </datalist>
+                    </Field>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field label="Player">
+                      <input
+                        type="text"
+                        list="match-squad"
+                        className={adminInputClass}
+                        placeholder="Type or pick a squad member"
+                        value={newEvent.player_name}
+                        onChange={(event) =>
+                          setNewEvent({ ...newEvent, player_name: event.target.value })
+                        }
+                      />
+                      <datalist id="match-squad">
+                        {squadForEvent.map((player) => (
+                          <option key={player.id} value={player.name} />
+                        ))}
+                      </datalist>
+                    </Field>
+
+                    <Field label="Assist (goals only)">
+                      <input
+                        type="text"
+                        list="match-squad-assist"
+                        className={adminInputClass}
+                        value={newEvent.assist_name}
+                        onChange={(event) =>
+                          setNewEvent({ ...newEvent, assist_name: event.target.value })
+                        }
+                      />
+                      <datalist id="match-squad-assist">
+                        {squadForEvent.map((player) => (
+                          <option key={player.id} value={player.name} />
+                        ))}
+                      </datalist>
+                    </Field>
+                  </div>
+                )}
 
                 <Field label="Details / notes">
                   <TextInput
-                    placeholder="e.g. Player A in, Player B out"
+                    placeholder="e.g. Tactical substitution, tactical change"
                     value={newEvent.details}
                     onValueChange={(value) => setNewEvent({ ...newEvent, details: value })}
                   />
