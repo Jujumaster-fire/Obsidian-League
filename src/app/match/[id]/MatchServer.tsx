@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { createClient } from '@/utils/supabase/server'
 import Navigation from '@/components/Navigation'
 import { MatchCenterSkeleton } from '@/components/Skeleton'
 import { MatchRealtimeClient } from './MatchRealtimeClient'
@@ -8,7 +8,8 @@ import type { CourtConfig } from '@/components/FormationCanvas'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 interface MatchPageServerProps {
   params: Promise<{ id: string }>
@@ -74,11 +75,12 @@ export interface MatchFixtureShape {
   home_team: MatchTeamShape
   away_team: MatchTeamShape
   stats: MatchStatsShape | null
+  article_md?: string | null
 }
 
 export async function generateMetadata({ params }: MatchPageServerProps): Promise<Metadata> {
   const { id } = await params
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: fixture } = await supabase
     .from('fixtures')
     .select('*, home_team:home_team_id(name,short_name), away_team:away_team_id(name,short_name)')
@@ -113,7 +115,7 @@ export async function generateMetadata({ params }: MatchPageServerProps): Promis
 }
 export default async function MatchServer({ params }: MatchPageServerProps) {
   const { id } = await params
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const [fixtureRes, eventsRes] = await Promise.all([
     supabase
@@ -125,7 +127,7 @@ export default async function MatchServer({ params }: MatchPageServerProps) {
       .from('match_events')
       .select('*, player:player_id(*), assist_player:assist_player_id(*), team:team_id(*)')
       .eq('fixture_id', id)
-      .order('minute', { ascending: true }),
+      .order('minute', { ascending: false }),
   ])
 
   const rawFixture = fixtureRes.data as Record<string, unknown> | null
@@ -148,6 +150,7 @@ export default async function MatchServer({ params }: MatchPageServerProps) {
     home_team: homeTeam,
     away_team: awayTeam,
     stats: (rawFixture.stats as MatchStatsShape | null) ?? null,
+    article_md: (rawFixture.article_md as string | null) ?? null,
   }
 
   const events: MatchEventShape[] = rawEvents.map((e) => ({
@@ -159,8 +162,6 @@ export default async function MatchServer({ params }: MatchPageServerProps) {
     team_id: (e.team_id as string | null) ?? null,
   }))
 
-  // PART 15: the sport's court shape + this fixture's stored formation and the
-  // two squads, so the Line-up tab renders server-side on first paint.
   const sportId = (rawFixture.sport_id as string | null) ?? null
   const teamIds = [homeTeam?.id, awayTeam?.id].filter(Boolean) as string[]
   const [sportRes, lineupRes, squadRes] = await Promise.all([
@@ -202,7 +203,6 @@ export default async function MatchServer({ params }: MatchPageServerProps) {
   const squad = (Array.isArray(squadRes.data) ? squadRes.data : []) as MatchSquadPlayer[]
 
   const isLive = fixture.status === 'in_progress' || fixture.status === 'extra_time'
-  const initialEvents = events.slice(0, 5)
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white pb-32">
@@ -213,7 +213,6 @@ export default async function MatchServer({ params }: MatchPageServerProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
         <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
           <MatchMetaCard fixture={fixture} />
-          <MatchMiniEvents initialEvents={initialEvents} />
 
           <Suspense fallback={<MatchCenterSkeleton />}>
             <MatchRealtimeClient
@@ -303,31 +302,6 @@ function MatchMetaCard({ fixture }: { fixture: MatchFixtureShape }) {
           Obsidian Elite {fixture.home_team.category} {fixture.home_team.team_type}
         </span>
       </p>
-    </div>
-  )
-}
-
-function MatchMiniEvents({ initialEvents }: { initialEvents: MatchEventShape[] }) {
-  return (
-    <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
-      <h3 className="font-bold text-lg mb-4 text-center">Match Events</h3>
-      {initialEvents.length === 0 ? (
-        <p className="text-gray-500 text-center text-sm">No events logged yet.</p>
-      ) : (
-        <div className="space-y-3 max-h-60 overflow-y-auto">
-          {initialEvents.map((e) => (
-            <div key={e.id} className="flex items-center justify-between text-sm py-2 border-b border-white/5 last:border-0">
-              <span className="text-gray-400 w-12">{e.minute}&apos;</span>
-              <span className="flex-1 font-medium text-center text-white">
-                {e.event_type.replace(/_/g, ' ')}
-              </span>
-              <span className="text-gray-400 flex-1 text-right truncate">
-                {e.player_name || 'N/A'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

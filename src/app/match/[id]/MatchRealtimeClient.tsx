@@ -64,10 +64,6 @@ export function MatchRealtimeClient({
   const [events, setEvents] = useState<MatchEventShape[]>(initialEvents)
   const [lineups, setLineups] = useState<MatchLineupSlot[]>(initialLineups)
 
-  // No sync effect needed: the server mounts this component fresh per fixture
-  // (keyed by fixtureId in MatchServer), so initialFixture/initialEvents are
-  // always current at mount. Realtime keeps them fresh afterwards.
-
   useEffect(() => {
     const channel = supabase
       .channel(`match_${fixtureId}`)
@@ -84,6 +80,7 @@ export function MatchRealtimeClient({
             status: (next.status as string | null) ?? prev.status,
             current_minute: (next.current_minute as number | null) ?? prev.current_minute,
             stats: (next.stats as MatchFixtureShape['stats']) ?? prev.stats,
+            article_md: (next.article_md as string | null) ?? prev.article_md,
           }))
         },
       )
@@ -150,7 +147,7 @@ export function MatchRealtimeClient({
     <div>
       <div
         data-tour="match-tabs"
-        className="max-w-7xl mx-auto px-4 mt-4 flex overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        className="max-w-7xl mx-auto px-4 mt-4 flex overflow-x-auto [&::-webkit-scrollbar]:hidden border-b border-white/10"
       >
         {TABS.map((tab) => (
           <button
@@ -180,7 +177,14 @@ export function MatchRealtimeClient({
       <div className="py-6" data-tour="match-live">
         {activeTab === 'Overview' && (
           <div id="match-tab-overview">
-            <OverviewPanel fixture={liveFixture} events={events} isLive={isLive} />
+            <OverviewPanel
+              fixture={liveFixture}
+              events={events}
+              isLive={isLive}
+              lineups={lineups}
+              squad={squad}
+              court={court}
+            />
           </div>
         )}
         {activeTab === 'Stats' && (
@@ -188,7 +192,15 @@ export function MatchRealtimeClient({
             <StatsPanel fixture={liveFixture} />
           </div>
         )}
-        {activeTab === 'Timeline' && (<div id="match-tab-timeline"><TimelinePanel events={events} homeId={liveFixture.home_team.id} awayId={liveFixture.away_team.id} homeShort={liveFixture.home_team.short_name} awayShort={liveFixture.away_team.short_name} /></div>)}
+        {activeTab === 'Timeline' && (
+          <div id="match-tab-timeline">
+            <TimelinePanel
+              events={events}
+              homeTeam={liveFixture.home_team}
+              awayTeam={liveFixture.away_team}
+            />
+          </div>
+        )}
         {activeTab === 'Line-up' && (
           <div id="match-tab-line-up">
             <LineupPanel
@@ -206,10 +218,27 @@ export function MatchRealtimeClient({
   )
 }
 
-function OverviewPanel({ fixture, events, isLive }: { fixture: MatchFixtureShape; events: MatchEventShape[]; isLive: boolean }) {
-  const initialEvents = events.slice(0, 5)
+function OverviewPanel({
+  fixture,
+  events,
+  isLive,
+  lineups,
+  squad,
+  court,
+}: {
+  fixture: MatchFixtureShape
+  events: MatchEventShape[]
+  isLive: boolean
+  lineups: MatchLineupSlot[]
+  squad: MatchSquadPlayer[]
+  court: CourtConfig
+}) {
+  const keyStats = ['shots', 'shots_on_target', 'fouls', 'corners', 'yellow_cards', 'red_cards']
+  const stats = fixture.stats
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* 1. Venue & Match Meta Banner */}
       <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5 text-center text-gray-400">
         <p>
           Venue: <span className="text-white font-medium">{fixture.venue || 'TBD'}</span>
@@ -227,26 +256,98 @@ function OverviewPanel({ fixture, events, isLive }: { fixture: MatchFixtureShape
         )}
       </div>
 
+      {/* 2. Mini Stats Section */}
       <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
-        <h3 className="font-bold text-lg mb-4 text-center">Match Events</h3>
-        {initialEvents.length === 0 ? (
+        <h3 className="font-bold text-lg mb-6 text-center text-indigo-400">Key Statistics</h3>
+        {stats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {keyStats.map((key) => {
+              const hVal = stats.home?.[key] || 0
+              const aVal = stats.away?.[key] || 0
+              return (
+                <div key={key} className="bg-white/5 rounded-lg p-3 text-center border border-white/5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-1">
+                    {key.replace(/_/g, ' ')}
+                  </span>
+                  <div className="flex items-center justify-between font-black text-base px-2">
+                    <span className="text-indigo-400">{hVal}</span>
+                    <span className="text-gray-600 text-xs font-normal">vs</span>
+                    <span className="text-blue-400">{aVal}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-center text-sm">No stats available yet.</p>
+        )}
+      </div>
+
+      {/* 3. Horizontal Match Timeline Ribbon */}
+      <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
+        <h3 className="font-bold text-lg mb-6 text-center text-amber-400">Match Timeline</h3>
+        {events.length === 0 ? (
           <p className="text-gray-500 text-center text-sm">No events logged yet.</p>
         ) : (
-          <div className="space-y-3 max-h-60 overflow-y-auto">
-            {initialEvents.map((e) => (
-              <div key={e.id} className="flex items-center justify-between text-sm py-2 border-b border-white/5 last:border-0">
-                <span className="text-gray-400 w-12">{e.minute}&apos;</span>
-                <span className="flex-1 font-medium text-center text-white">
-                  {e.event_type.replace(/_/g, ' ')}
-                </span>
-                <span className="text-gray-400 flex-1 text-right truncate">
-                  {e.player_name || 'N/A'}
-                </span>
-              </div>
-            ))}
+          <div className="relative py-4 overflow-x-auto">
+            <div className="h-1 bg-white/10 rounded-full w-full min-w-[500px] relative my-6">
+              {events.map((e) => {
+                const isHome = e.team_id === fixture.home_team.id
+                const min = e.minute || 1
+                const pct = Math.min(100, Math.max(0, (min / 90) * 100))
+                return (
+                  <div
+                    key={e.id}
+                    className="absolute -top-3 flex flex-col items-center group cursor-pointer"
+                    style={{ left: `${pct}%` }}
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 shadow-lg ${
+                        isHome ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-blue-600 border-blue-400 text-white'
+                      }`}
+                    >
+                      {min}&apos;
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-8 bg-black/90 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-20 border border-white/10 pointer-events-none">
+                      <p className="font-bold capitalize">{e.event_type.replace(/_/g, ' ')}</p>
+                      {e.player_name && <p className="text-gray-300">{e.player_name}</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 font-mono mt-2 min-w-[500px]">
+              <span>0&apos;</span>
+              <span>45&apos; (HT)</span>
+              <span>90&apos; (FT)</span>
+            </div>
           </div>
         )}
       </div>
+
+      {/* 4. On-Field Visualized Lineup Canvas */}
+      <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5">
+        <h3 className="font-bold text-lg mb-6 text-center text-emerald-400">On-Field Formations</h3>
+        <LineupPanel
+          homeTeam={fixture.home_team}
+          awayTeam={fixture.away_team}
+          lineups={lineups}
+          squad={squad}
+          court={court}
+        />
+      </div>
+
+      {/* 5. Match Insights & Report Article Section */}
+      {fixture.article_md && (
+        <div className="bg-[#1e293b] rounded-xl p-6 border border-white/5 space-y-4">
+          <h3 className="font-bold text-xl border-b border-white/10 pb-3 text-indigo-300">
+            Match Insights &amp; Report
+          </h3>
+          <div className="prose prose-invert max-w-none text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+            {fixture.article_md}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -293,16 +394,12 @@ function StatsPanel({ fixture }: { fixture: MatchFixtureShape }) {
 
 function TimelinePanel({
   events,
-  homeId,
-  awayId,
-  homeShort,
-  awayShort,
+  homeTeam,
+  awayTeam,
 }: {
   events: MatchEventShape[]
-  homeId: string
-  awayId: string
-  homeShort: string
-  awayShort: string
+  homeTeam: MatchFixtureShape['home_team']
+  awayTeam: MatchFixtureShape['away_team']
 }) {
   if (events.length === 0) {
     return (
@@ -317,8 +414,10 @@ function TimelinePanel({
       <h3 className="font-bold text-xl mb-8 text-center">Match Timeline</h3>
       <div className="relative border-l border-white/10 ml-6 space-y-6">
         {events.map((e) => {
-          const isHome = e.team_id === homeId
-          const isAway = e.team_id === awayId
+          const isHome = e.team_id === homeTeam.id
+          const teamName = isHome ? homeTeam.name : e.team_id === awayTeam.id ? awayTeam.name : 'Match Event'
+          const teamBadge = isHome ? homeTeam.short_name : awayTeam.short_name
+
           return (
             <div key={e.id} className="relative pl-6">
               <div className="absolute w-3 h-3 bg-indigo-500 rounded-full -left-[6.5px] top-1.5 shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
@@ -326,17 +425,16 @@ function TimelinePanel({
                 <span className="font-bold text-indigo-400 text-lg w-10 shrink-0">
                   {e.minute}&apos;
                 </span>
-                <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex-1">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold capitalize">{e.event_type.replace(/_/g, ' ')}</span>
-                    {e.team_id && (
-                      <span className="text-xs font-semibold px-2 py-1 bg-black/30 rounded text-gray-300">
-                        {isHome ? homeShort : isAway ? awayShort : ''}
-                      </span>
-                    )}
+                <div className="bg-white/5 border border-white/10 rounded-lg p-4 flex-1">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold capitalize text-base">{e.event_type.replace(/_/g, ' ')}</span>
+                    <span className="text-xs font-bold px-2.5 py-1 bg-indigo-600/30 border border-indigo-500/30 rounded-full text-indigo-300 flex items-center gap-1.5">
+                      <span>{teamName}</span>
+                      <span className="opacity-60">({teamBadge})</span>
+                    </span>
                   </div>
                   {e.player_name && (
-                    <p className="text-sm font-medium text-white/90">{e.player_name}</p>
+                    <p className="text-sm font-semibold text-white/90">{e.player_name}</p>
                   )}
                   {e.details && <p className="text-xs text-gray-400 mt-1">{e.details}</p>}
                 </div>
