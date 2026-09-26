@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 import { BrandedLoader } from '@/components/Skeleton'
@@ -28,14 +28,41 @@ interface CompetitionsTabsProps {
   players: Player[]
 }
 
-export function CompetitionsTabs({ fixtures, teams, events, players }: CompetitionsTabsProps) {
+export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, events: allEvents, players: allPlayers }: CompetitionsTabsProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const raw = searchParams.get('tab') ?? DEFAULT_TAB
   const initialTab: Tab = VALID_TABS.includes(raw as Tab) ? (raw as Tab) : DEFAULT_TAB
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
 
-  const view = computeCompetitionsView(fixtures, teams, events, players)
+  const currentSport = searchParams.get('sport') || 'Football'
+  const currentGender = searchParams.get('gender') || 'Female'
+
+  // Filter the data down based on global filters
+  const { filteredFixtures, filteredTeams, filteredEvents, filteredPlayers } = useMemo(() => {
+    const teams = allTeams.filter(
+      (t) =>
+        (t.team_type ?? 'Football') === currentSport &&
+        (t.category ?? 'Female') === currentGender
+    )
+
+    const teamIds = new Set(teams.map((t) => t.id))
+
+    const fixtures = allFixtures.filter(
+      (f) => teamIds.has(f.home_team_id) || teamIds.has(f.away_team_id)
+    )
+
+    const players = allPlayers.filter((p) => p.team_id && teamIds.has(p.team_id))
+    const playerIds = new Set(players.map((p) => p.id))
+
+    const events = allEvents.filter(
+      (e) => (e.player_id && playerIds.has(e.player_id)) || (e.assist_player_id && playerIds.has(e.assist_player_id))
+    )
+
+    return { filteredFixtures: fixtures, filteredTeams: teams, filteredEvents: events, filteredPlayers: players }
+  }, [allFixtures, allTeams, allEvents, allPlayers, currentSport, currentGender])
+
+  const view = computeCompetitionsView(filteredFixtures, filteredTeams, filteredEvents, filteredPlayers)
 
   const isOngoing = (status: string | null | undefined) =>
     status === 'in_progress' || status === 'extra_time' || status === 'paused' || status === 'half_time'
@@ -44,11 +71,13 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
     .filter((f) => isOngoing(f.status))
     .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
 
-  // Exclude kicked-off (live/ongoing) matches from the upcoming list so they only render under Live Now.
+  // Upcoming STRICTLY scheduled
   const upcoming = view.upcoming.filter(
-    (f) => !isOngoing(f.status) && f.status !== 'full_time'
+    (f) => f.status === 'scheduled' || f.status === 'delayed' || f.status === 'suspended'
   )
-  const results = view.results
+
+  // Results STRICTLY full time
+  const results = view.results.filter((f) => f.status === 'full_time')
 
   const navigateTo = (tab: Tab) => {
     const url = new URL(window.location.href)
@@ -126,9 +155,22 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
               <p className="text-gray-400 text-sm">No upcoming fixtures scheduled.</p>
             ) : (
               <div className="space-y-4">
-                {upcoming.map((f) => (
+                {upcoming.slice(0, 5).map((f) => (
                   <FixtureCard key={f.id} match={f} />
                 ))}
+                {upcoming.length > 5 && (
+                  <div className="text-center">
+                    <span className="text-emerald-400 text-sm">
+                      +{upcoming.length - 5} more on{' '}
+                      <button
+                        onClick={() => handleTabClick('fixtures')}
+                        className="underline hover:text-emerald-300"
+                      >
+                        fixtures
+                      </button>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -139,13 +181,13 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
               <p className="text-gray-400 text-sm">No matches have been played yet.</p>
             ) : (
               <div className="space-y-4">
-                {results.slice(0, 6).map((f) => (
+                {results.slice(0, 5).map((f) => (
                   <FixtureCard key={f.id} match={f} />
                 ))}
-                {results.length > 6 && (
+                {results.length > 5 && (
                   <div className="text-center">
                     <span className="text-indigo-400 text-sm">
-                      +{results.length - 6} more results on{' '}
+                      +{results.length - 5} more results on{' '}
                       <button
                         onClick={() => handleTabClick('results')}
                         className="underline hover:text-indigo-300"
@@ -162,23 +204,23 @@ export function CompetitionsTabs({ fixtures, teams, events, players }: Competiti
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-black/20 rounded-lg p-5 border border-white/10">
-            <h3 className="font-bold text-lg text-emerald-400 mb-4">Team Expected Goals</h3>
-            {view.teamXg.length === 0 ? (
-              <p className="text-gray-400 text-sm">No xG data available yet.</p>
+            <h3 className="font-bold text-lg text-emerald-400 mb-4">Top Goal Scorers</h3>
+            {view.topScorers.length === 0 ? (
+              <p className="text-gray-400 text-sm">No goals have been scored yet.</p>
             ) : (
               <div className="space-y-3">
-                {view.teamXg.slice(0, 8).map((teamXg, idx) => (
+                {view.topScorers.slice(0, 8).map((row, idx) => (
                   <div key={idx} className="flex justify-between items-center">
                     <div>
-                      <div className="font-semibold">{teamXg.team.name}</div>
-                      <div className="text-xs text-gray-500">{teamXg.team.short_name}</div>
+                      <div className="font-semibold">{row.player?.name}</div>
+                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
                     </div>
-                    <div className="text-2xl font-black text-indigo-400">{teamXg.xg.toFixed(2)}</div>
+                    <div className="text-xl font-black text-emerald-400">{row.value}</div>
                   </div>
                 ))}
-                {view.teamXg.length > 8 && (
-                  <p className="text-gray-500 text-sm">
-                    +{view.teamXg.length - 8} more teams on stats tab
+                {view.topScorers.length > 8 && (
+                  <p className="text-gray-500 text-sm mt-3 pt-3 border-t border-white/5">
+                    +{view.topScorers.length - 8} more players on stats tab
                   </p>
                 )}
               </div>

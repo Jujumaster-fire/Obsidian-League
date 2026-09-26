@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navigation from '@/components/Navigation'
+import { CompetitionsFilter } from './CompetitionsFilter'
 import { CompetitionsTabs } from './CompetitionsTabs'
 
 export const revalidate = 30
@@ -30,6 +31,9 @@ export default async function CompetitionsPage() {
             <p className="text-gray-400 text-lg">Obsidian Elite Tournament Hub</p>
           </div>
         </header>
+        <Suspense fallback={<div className="h-14" />}>
+          <CompetitionsFilter />
+        </Suspense>
         <Suspense fallback={<div className="py-20 text-center text-gray-400">Loading competitions…</div>}>
           <CompetitionsTabs
             fixtures={fixturesRes.data ?? []}
