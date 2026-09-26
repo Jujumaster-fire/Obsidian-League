@@ -36,6 +36,8 @@ export interface Fixture {
 }
 
 export interface Team {
+  category: string | null
+  team_type: string | null
   id: string
   name: string
   short_name: string | null
