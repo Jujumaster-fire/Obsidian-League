@@ -170,12 +170,12 @@ export default function AdminDashboard() {
       if (finalError) throw finalError
 
       // Generate Semi-Finals
-      let nextRoundIds = [finalData.id, finalData.id]
-      let nextRoundSlots = ['home', 'away']
+      const nextRoundIds = [finalData.id, finalData.id]
+      const nextRoundSlots = ['home', 'away']
 
       const insertRound = async (numMatches: number, stageName: string, parentIds: string[], parentSlots: string[]) => {
-        let currentRoundIds: string[] = []
-        let currentRoundSlots: string[] = []
+        const currentRoundIds: string[] = []
+        const currentRoundSlots: string[] = []
 
         for (let i = 0; i < numMatches; i++) {
           const { data, error } = await supabase
@@ -281,13 +281,15 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loading effect: fetch then set state once
+    // oxlint-disable-next-line react/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTournaments()
   }, [authLoading, canAccessAdmin, loadTournaments])
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loading effect: fetch then set state once
+    // oxlint-disable-next-line react/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTournamentData(selectedTournamentId)
   }, [authLoading, canAccessAdmin, selectedTournamentId, loadTournamentData])
 
