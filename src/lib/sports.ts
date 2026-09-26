@@ -43,17 +43,19 @@ export interface EventOption {
  */
 export const LEGACY_STAT_VOCAB: StatOption[] = [
   { key: 'passes', label: 'Passes' },
-  { key: 'shots', label: 'Shots' },
-  { key: 'shots_on_target', label: 'Shots on target' },
-  { key: 'shots_off_target', label: 'Shots off target' },
+  { key: 'shots', label: 'Shots', input: 'value' },
+  { key: 'shots_on_target', label: 'Shots on target', input: 'value' },
+  { key: 'shots_off_target', label: 'Shots off target', input: 'value' },
   { key: 'fouls', label: 'Fouls' },
-  { key: 'corners', label: 'Corners' },
+  { key: 'corners', label: 'Corners', input: 'value' },
   { key: 'freekicks', label: 'Free kicks' },
   { key: 'offsides', label: 'Offsides' },
   { key: 'yellow_cards', label: 'Yellow cards' },
   { key: 'red_cards', label: 'Red cards' },
   { key: 'gk_saves', label: 'GK saves' },
-  { key: 'interceptions', label: 'Interceptions' },
+  { key: 'interceptions', label: 'Interceptions', input: 'value' },
+  { key: 'duels_won', label: 'Duels won', input: 'value' },
+  { key: 'tackles', label: 'Tackles', input: 'value' },
 ]
 
 export type ClockType =

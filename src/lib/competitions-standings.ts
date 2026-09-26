@@ -33,6 +33,7 @@ export interface Fixture {
   away_team_id: string
   home_team: { name: string | null; short_name: string | null } | null
   away_team: { name: string | null; short_name: string | null } | null
+  stats?: Record<string, Record<string, number | undefined>> | null
 }
 
 export interface Team {
@@ -67,8 +68,19 @@ export interface CompetitionsView {
   topAssists: TopPlayerRow[]
   topYellow: TopPlayerRow[]
   topRed: TopPlayerRow[]
-  teamXg: { team: Team; xg: number }[]
   topCleanSheets: TopPlayerRow[]
+  topTacklesPlayers: TopPlayerRow[]
+  topInterceptionsPlayers: TopPlayerRow[]
+
+  teamXg: { team: Team; value: number }[]
+  teamScorers: { team: Team; value: number }[]
+  teamDuelsWon: { team: Team; value: number }[]
+  teamCleanSheets: { team: Team; value: number }[]
+  teamInterceptions: { team: Team; value: number }[]
+  teamTackles: { team: Team; value: number }[]
+  teamShots: { team: Team; value: number }[]
+  teamShotsOnTarget: { team: Team; value: number }[]
+
   playoffMatches: Fixture[]
   groupNames: string[]
 }
@@ -158,41 +170,94 @@ export function computeCompetitionsView(
     })
   }
 
+  // Player Events
   const sm:Record<string,number>={}, am:Record<string,number>={},
-        ym:Record<string,number>={}, rm:Record<string,number>={}
+        ym:Record<string,number>={}, rm:Record<string,number>={},
+        tk:Record<string,number>={}, ic:Record<string,number>={},
+        csm:Record<string,number>={}
+
   for (const e of events) {
     const pid=e.player_id, aid=e.assist_player_id, t=e.event_type
     if (t==='goal' && pid) sm[pid]=(sm[pid]||0)+1
     if (t==='goal' && aid) am[aid]=(am[aid]||0)+1
     if (t==='yellow_card' && pid) ym[pid]=(ym[pid]||0)+1
     if (t==='red_card' && pid) rm[pid]=(rm[pid]||0)+1
+    if (t==='tackle' && pid) tk[pid]=(tk[pid]||0)+1
+    if (t==='interception' && pid) ic[pid]=(ic[pid]||0)+1
+    if (t==='clean_sheet' && pid) csm[pid]=(csm[pid]||0)+1 // Also allow manual clean sheet event
   }
-  const e2r = (m:Record<string,number>)=>Object.keys(m).map(id=>({player:menuById.get(id),value:m[id]})).filter(r=>r.player).sort((a,b)=>b.value-a.value)
-  const topScorers=e2r(sm).slice(0,10)
-  const topAssists=e2r(am).slice(0,10)
-  const topYellow=e2r(ym).slice(0,10)
-  const topRed=e2r(rm).slice(0,10)
 
-  const txm:Record<string,number>={}
-  for (const f of results) {
-    txm[f.home_team_id]=(txm[f.home_team_id]||0)+(f.home_xg||0)
-    txm[f.away_team_id]=(txm[f.away_team_id]||0)+(f.away_xg||0)
-  }
-  const teamXg=Object.keys(txm).map(id=>({team:teamById.get(id)!,xg:txm[id]})).filter(r=>r.team).sort((a,b)=>b.xg-a.xg)
-
-  const csm:Record<string,number>={}
+  // Goalkeeper clean sheets (from fixtures table)
   for (const f of results) {
     if (f.home_clean_sheet && f.home_goalkeeper_id) csm[f.home_goalkeeper_id]=(csm[f.home_goalkeeper_id]||0)+1
     if (f.away_clean_sheet && f.away_goalkeeper_id) csm[f.away_goalkeeper_id]=(csm[f.away_goalkeeper_id]||0)+1
   }
-  const topCleanSheets=e2r(csm).slice(0,10)
+
+  const e2r = (m:Record<string,number>)=>Object.keys(m).map(id=>({player:menuById.get(id),value:m[id]})).filter(r=>r.player).sort((a,b)=>b.value-a.value)
+  const topScorers=e2r(sm)
+  const topAssists=e2r(am)
+  const topYellow=e2r(ym)
+  const topRed=e2r(rm)
+  const topTacklesPlayers=e2r(tk)
+  const topInterceptionsPlayers=e2r(ic)
+  const topCleanSheets=e2r(csm)
+
+  // Team Stats
+  const txm:Record<string,number>={} // xG
+  const tsm:Record<string,number>={} // scorers
+  const tdm:Record<string,number>={} // duels_won
+  const tcm:Record<string,number>={} // clean sheets
+  const tim:Record<string,number>={} // interceptions
+  const ttm:Record<string,number>={} // tackles
+  const tshm:Record<string,number>={} // shots
+  const tsotm:Record<string,number>={} // shots_on_target
+
+  for (const f of results) {
+    txm[f.home_team_id]=(txm[f.home_team_id]||0)+(f.home_xg||0)
+    txm[f.away_team_id]=(txm[f.away_team_id]||0)+(f.away_xg||0)
+
+    tsm[f.home_team_id]=(tsm[f.home_team_id]||0)+(f.home_score||0)
+    tsm[f.away_team_id]=(tsm[f.away_team_id]||0)+(f.away_score||0)
+
+    if (f.home_clean_sheet) tcm[f.home_team_id]=(tcm[f.home_team_id]||0)+1
+    if (f.away_clean_sheet) tcm[f.away_team_id]=(tcm[f.away_team_id]||0)+1
+
+    if (f.stats) {
+      if (f.stats.home) {
+        tdm[f.home_team_id]=(tdm[f.home_team_id]||0)+(f.stats.home.duels_won||0)
+        tim[f.home_team_id]=(tim[f.home_team_id]||0)+(f.stats.home.interceptions||0)
+        ttm[f.home_team_id]=(ttm[f.home_team_id]||0)+(f.stats.home.tackles||0)
+        tshm[f.home_team_id]=(tshm[f.home_team_id]||0)+(f.stats.home.shots||0)
+        tsotm[f.home_team_id]=(tsotm[f.home_team_id]||0)+(f.stats.home.shots_on_target||0)
+      }
+      if (f.stats.away) {
+        tdm[f.away_team_id]=(tdm[f.away_team_id]||0)+(f.stats.away.duels_won||0)
+        tim[f.away_team_id]=(tim[f.away_team_id]||0)+(f.stats.away.interceptions||0)
+        ttm[f.away_team_id]=(ttm[f.away_team_id]||0)+(f.stats.away.tackles||0)
+        tshm[f.away_team_id]=(tshm[f.away_team_id]||0)+(f.stats.away.shots||0)
+        tsotm[f.away_team_id]=(tsotm[f.away_team_id]||0)+(f.stats.away.shots_on_target||0)
+      }
+    }
+  }
+
+  const t2r = (m:Record<string,number>)=>Object.keys(m).map(id=>({team:teamById.get(id)!,value:m[id]})).filter(r=>r.team && r.value > 0).sort((a,b)=>b.value-a.value)
+
+  const teamXg=t2r(txm)
+  const teamScorers=t2r(tsm)
+  const teamDuelsWon=t2r(tdm)
+  const teamCleanSheets=t2r(tcm)
+  const teamInterceptions=t2r(tim)
+  const teamTackles=t2r(ttm)
+  const teamShots=t2r(tshm)
+  const teamShotsOnTarget=t2r(tsotm)
 
   const playoffMatches:Fixture[]=[]
   for (const f of fixtures) if (f.stage!=='group_stage') playoffMatches.push(f)
 
   return {
     results, upcoming, standings:groupStats,
-    topScorers, topAssists, topYellow, topRed, teamXg, topCleanSheets,
+    topScorers, topAssists, topYellow, topRed, topTacklesPlayers, topInterceptionsPlayers, topCleanSheets,
+    teamXg, teamScorers, teamDuelsWon, teamCleanSheets, teamInterceptions, teamTackles, teamShots, teamShotsOnTarget,
     playoffMatches, groupNames,
   }
 }

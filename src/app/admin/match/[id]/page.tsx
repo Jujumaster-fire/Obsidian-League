@@ -57,6 +57,9 @@ const EVENT_CATEGORIES: CustomEventCategory[] = [
   { key: 'half_time', label: 'Half-time' },
   { key: 'full_time', label: 'Full-time' },
   { key: 'substitution', label: 'Substitutions' },
+  { key: 'tackle', label: 'Tackle' },
+  { key: 'interception', label: 'Interception' },
+  { key: 'clean_sheet', label: 'Clean Sheet' },
 ]
 
 const CARD_PUNISHMENTS = [

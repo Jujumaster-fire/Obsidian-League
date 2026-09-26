@@ -15,6 +15,8 @@ import { FixtureCard } from '@/components/competitions/FixtureCard'
 import { StandingsTable } from '@/components/competitions/Standings'
 import { PlayoffTabs } from '@/components/competitions/PlayoffTabs'
 import { RealtimeClient } from './RealtimeClient'
+import { StatPreviewCard } from '@/components/competitions/StatPreviewCard'
+import { StatModal, type StatModalRow } from '@/components/competitions/StatModal'
 
 const VALID_TABS = ['overview', 'results', 'fixtures', 'stats', 'groups', 'playoffs'] as const
 type Tab = (typeof VALID_TABS)[number]
@@ -86,19 +88,31 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
     } else {
       url.searchParams.set('tab', tab)
     }
-    router.push(url.pathname + url.search, { scroll: false })
+    router.replace(url.pathname + url.search, { scroll: false })
     setActiveTab(tab)
-  }
-
-  const scrollToSection = (tab: Tab) => {
-    const id = `section-${tab}`
-    const el = document.getElementById(id)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const handleTabClick = (tab: Tab) => {
     navigateTo(tab)
-    scrollToSection(tab)
+  }
+
+  // --- STATS STATE ---
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalConfig, setModalConfig] = useState<{title: string, headers: [string, string, string], data: StatModalRow[]}>({
+    title: '', headers: ['#', 'Name', 'Value'], data: []
+  })
+
+  const openStatModal = (title: string, entityLabel: string, valueLabel: string, rawData: { player?: Player, team?: Team, value: number }[]) => {
+    const data: StatModalRow[] = rawData.map((row) => {
+      if (row.player) {
+        return { id: row.player.id, title: row.player.name, subtitle: row.player.team?.name ?? '', value: row.value }
+      } else if (row.team) {
+        return { id: row.team.id, title: row.team.name, subtitle: row.team.short_name ?? '', value: row.value }
+      }
+      return { id: Math.random().toString(), title: 'Unknown', value: row.value }
+    })
+    setModalConfig({ title, headers: ['#', entityLabel, valueLabel], data })
+    setModalOpen(true)
   }
 
   return (
@@ -128,322 +142,310 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
       </nav>
 
       {/* Overview */}
-      <div id="section-overview" className="space-y-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
-            <h3 className="text-lg font-bold mb-2 text-indigo-400">Matches Played</h3>
-            <div className="text-3xl font-black">{results.length}</div>
-          </div>
-          <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
-            <h3 className="text-lg font-bold mb-2 text-emerald-400">Upcoming</h3>
-            <div className="text-3xl font-black">{upcoming.length}</div>
-          </div>
-          <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
-            <h3 className="text-lg font-bold mb-2 text-rose-400">Live Now</h3>
-            <div className="text-3xl font-black text-red-400">{liveFixtures.length}</div>
-          </div>
-        </div>
-
-        <Suspense fallback={<BrandedLoader message="Refreshing live matches…" />}>
-          <RealtimeClient liveFixtures={liveFixtures} />
-        </Suspense>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
-            <h3 className="text-lg font-bold mb-4 text-emerald-400">Upcoming Fixtures</h3>
-            {upcoming.length === 0 ? (
-              <p className="text-gray-400 text-sm">No upcoming fixtures scheduled.</p>
-            ) : (
-              <div className="space-y-4">
-                {upcoming.slice(0, 5).map((f) => (
-                  <FixtureCard key={f.id} match={f} />
-                ))}
-                {upcoming.length > 5 && (
-                  <div className="text-center">
-                    <span className="text-emerald-400 text-sm">
-                      +{upcoming.length - 5} more on{' '}
-                      <button
-                        onClick={() => handleTabClick('fixtures')}
-                        className="underline hover:text-emerald-300"
-                      >
-                        fixtures
-                      </button>
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
+      {activeTab === 'overview' && (
+        <div className="space-y-12 animate-in fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
+              <h3 className="text-lg font-bold mb-2 text-indigo-400">Matches Played</h3>
+              <div className="text-3xl font-black">{results.length}</div>
+            </div>
+            <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
+              <h3 className="text-lg font-bold mb-2 text-emerald-400">Upcoming</h3>
+              <div className="text-3xl font-black">{upcoming.length}</div>
+            </div>
+            <div className="bg-[#1e293b] rounded-lg p-5 border border-white/5">
+              <h3 className="text-lg font-bold mb-2 text-rose-400">Live Now</h3>
+              <div className="text-3xl font-black text-red-400">{liveFixtures.length}</div>
+            </div>
           </div>
 
-          <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
-            <h3 className="text-lg font-bold mb-4 text-indigo-400">Latest Results</h3>
-            {results.length === 0 ? (
-              <p className="text-gray-400 text-sm">No matches have been played yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {results.slice(0, 5).map((f) => (
-                  <FixtureCard key={f.id} match={f} />
-                ))}
-                {results.length > 5 && (
-                  <div className="text-center">
-                    <span className="text-indigo-400 text-sm">
-                      +{results.length - 5} more results on{' '}
-                      <button
-                        onClick={() => handleTabClick('results')}
-                        className="underline hover:text-indigo-300"
-                      >
-                        results
-                      </button>
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+          <Suspense fallback={<BrandedLoader message="Refreshing live matches…" />}>
+            <RealtimeClient liveFixtures={liveFixtures} />
+          </Suspense>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-black/20 rounded-lg p-5 border border-white/10">
-            <h3 className="font-bold text-lg text-emerald-400 mb-4">Top Goal Scorers</h3>
-            {view.topScorers.length === 0 ? (
-              <p className="text-gray-400 text-sm">No goals have been scored yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {view.topScorers.slice(0, 8).map((row, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <div>
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
+              <h3 className="text-lg font-bold mb-4 text-emerald-400">Upcoming Fixtures</h3>
+              {upcoming.length === 0 ? (
+                <p className="text-gray-400 text-sm">No upcoming fixtures scheduled.</p>
+              ) : (
+                <div className="space-y-4">
+                  {upcoming.slice(0, 5).map((f) => (
+                    <FixtureCard key={f.id} match={f} />
+                  ))}
+                  {upcoming.length > 5 && (
+                    <div className="text-center">
+                      <span className="text-emerald-400 text-sm">
+                        +{upcoming.length - 5} more on{' '}
+                        <button
+                          onClick={() => handleTabClick('fixtures')}
+                          className="underline hover:text-emerald-300"
+                        >
+                          fixtures
+                        </button>
+                      </span>
                     </div>
-                    <div className="text-xl font-black text-emerald-400">{row.value}</div>
-                  </div>
-                ))}
-                {view.topScorers.length > 8 && (
-                  <p className="text-gray-500 text-sm mt-3 pt-3 border-t border-white/5">
-                    +{view.topScorers.length - 8} more players on stats tab
-                  </p>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
+              <h3 className="text-lg font-bold mb-4 text-indigo-400">Latest Results</h3>
+              {results.length === 0 ? (
+                <p className="text-gray-400 text-sm">No matches have been played yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {results.slice(0, 5).map((f) => (
+                    <FixtureCard key={f.id} match={f} />
+                  ))}
+                  {results.length > 5 && (
+                    <div className="text-center">
+                      <span className="text-indigo-400 text-sm">
+                        +{results.length - 5} more results on{' '}
+                        <button
+                          onClick={() => handleTabClick('results')}
+                          className="underline hover:text-indigo-300"
+                        >
+                          results
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="bg-black/20 rounded-lg p-5 border border-white/10">
-            <h3 className="font-bold text-lg text-amber-400 mb-4">Clean Sheets</h3>
-            {view.topCleanSheets.length === 0 ? (
-              <p className="text-gray-400 text-sm">No clean sheet data yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {view.topCleanSheets.slice(0, 8).map((row, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <div>
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {row.player?.team?.name}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-black/20 rounded-lg p-5 border border-white/10">
+              <h3 className="font-bold text-lg text-emerald-400 mb-4">Top Goal Scorers</h3>
+              {view.topScorers.length === 0 ? (
+                <p className="text-gray-400 text-sm">No goals have been scored yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {view.topScorers.slice(0, 8).map((row, idx) => (
+                    <div key={idx} className="flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold">{row.player?.name}</div>
+                        <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
                       </div>
+                      <div className="text-xl font-black text-emerald-400">{row.value}</div>
                     </div>
-                    <div className="text-xl font-black text-amber-400">{row.value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                  {view.topScorers.length > 8 && (
+                    <p className="text-gray-500 text-sm mt-3 pt-3 border-t border-white/5">
+                      +{view.topScorers.length - 8} more players on stats tab
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-black/20 rounded-lg p-5 border border-white/10">
+              <h3 className="font-bold text-lg text-amber-400 mb-4">Clean Sheets</h3>
+              {view.topCleanSheets.length === 0 ? (
+                <p className="text-gray-400 text-sm">No clean sheet data yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {view.topCleanSheets.slice(0, 8).map((row, idx) => (
+                    <div key={idx} className="flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold">{row.player?.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {row.player?.team?.name}
+                        </div>
+                      </div>
+                      <div className="text-xl font-black text-amber-400">{row.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Results */}
-      <div id="section-results">
-        <h2 className="text-2xl font-bold mb-6">Match Results</h2>
-        {results.length === 0 ? (
-          <div className="p-10 text-center bg-[#1e293b] rounded-lg border border-white/5">
-            No matches have ended yet.
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {results.map((f) => (
-              <FixtureCard key={f.id} match={f} />
-            ))}
-          </div>
-        )}
-      </div>
+      {activeTab === 'results' && (
+        <div className="animate-in fade-in">
+          <h2 className="text-2xl font-bold mb-6">Match Results</h2>
+          {results.length === 0 ? (
+            <div className="p-10 text-center bg-[#1e293b] rounded-lg border border-white/5">
+              No matches have ended yet.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {results.map((f) => (
+                <FixtureCard key={f.id} match={f} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Fixtures */}
-      <div id="section-fixtures">
-        <h2 className="text-2xl font-bold mb-6">Upcoming Matches</h2>
-        {upcoming.length === 0 ? (
-          <div className="p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">
-            No upcoming matches scheduled.
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {upcoming.map((f) => (
-              <FixtureCard key={f.id} match={f} />
-            ))}
-          </div>
-        )}
-      </div>
+      {activeTab === 'fixtures' && (
+        <div className="animate-in fade-in">
+          <h2 className="text-2xl font-bold mb-6">Upcoming Matches</h2>
+          {upcoming.length === 0 ? (
+            <div className="p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">
+              No upcoming matches scheduled.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {upcoming.map((f) => (
+                <FixtureCard key={f.id} match={f} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
-      <div id="section-stats" className="space-y-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-[#1e293b] rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-indigo-900/50 p-4 border-b border-white/10">
-              <h3 className="font-bold text-lg">Top Scorers</h3>
-            </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-black/20 text-gray-400">
-                <tr>
-                  <th className="p-3">#</th>
-                  <th className="p-3">Player</th>
-                  <th className="p-3 text-right">Goals</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {view.topScorers.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-white/5">
-                    <td className="p-3">{idx + 1}</td>
-                    <td className="p-3">
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
-                    </td>
-                    <td className="p-3 text-right font-bold text-indigo-400">{row.value}</td>
-                  </tr>
-                ))}
-                {view.topScorers.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-gray-500">No data available</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+      {activeTab === 'stats' && (
+        <div className="space-y-8 animate-in fade-in">
+          <h2 className="text-2xl font-bold mb-6">Competition Statistics</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+
+            <StatPreviewCard
+              title="Top Scorers (Teams)"
+              data={view.teamScorers.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="indigo"
+              onClick={() => openStatModal('Top Scorers (Teams)', 'Team', 'Goals', view.teamScorers)}
+            />
+
+            <StatPreviewCard
+              title="Top Scorers (Players)"
+              data={view.topScorers.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="indigo"
+              onClick={() => openStatModal('Top Scorers (Players)', 'Player', 'Goals', view.topScorers)}
+            />
+
+            <StatPreviewCard
+              title="Top Assists (Players)"
+              data={view.topAssists.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="blue"
+              onClick={() => openStatModal('Top Assists (Players)', 'Player', 'Assists', view.topAssists)}
+            />
+
+            <StatPreviewCard
+              title="Highest Tackles (Teams)"
+              data={view.teamTackles.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="emerald"
+              onClick={() => openStatModal('Highest Tackles (Teams)', 'Team', 'Tackles', view.teamTackles)}
+            />
+
+            <StatPreviewCard
+              title="Highest Tackles (Players)"
+              data={view.topTacklesPlayers.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="emerald"
+              onClick={() => openStatModal('Highest Tackles (Players)', 'Player', 'Tackles', view.topTacklesPlayers)}
+            />
+
+            <StatPreviewCard
+              title="Highest Interceptions (Teams)"
+              data={view.teamInterceptions.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="yellow"
+              onClick={() => openStatModal('Highest Interceptions (Teams)', 'Team', 'Interceptions', view.teamInterceptions)}
+            />
+
+            <StatPreviewCard
+              title="Top Duels Won (Teams)"
+              data={view.teamDuelsWon.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="amber"
+              onClick={() => openStatModal('Top Duels Won (Teams)', 'Team', 'Duels Won', view.teamDuelsWon)}
+            />
+
+            <StatPreviewCard
+              title="Clean Sheets (Teams)"
+              data={view.teamCleanSheets.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="amber"
+              onClick={() => openStatModal('Clean Sheets (Teams)', 'Team', 'Clean Sheets', view.teamCleanSheets)}
+            />
+
+            <StatPreviewCard
+              title="Clean Sheets (Goalkeepers)"
+              data={view.topCleanSheets.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="amber"
+              onClick={() => openStatModal('Clean Sheets (Goalkeepers)', 'Goalkeeper', 'Clean Sheets', view.topCleanSheets)}
+            />
+
+            <StatPreviewCard
+              title="Highest Shots (Teams)"
+              data={view.teamShots.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="indigo"
+              onClick={() => openStatModal('Highest Shots (Teams)', 'Team', 'Shots', view.teamShots)}
+            />
+
+            <StatPreviewCard
+              title="Shots On Target (Teams)"
+              data={view.teamShotsOnTarget.map(r => ({ id: r.team.id, title: r.team.name, subtitle: r.team.short_name ?? '', value: r.value }))}
+              themeColor="indigo"
+              onClick={() => openStatModal('Shots On Target (Teams)', 'Team', 'Shots on Target', view.teamShotsOnTarget)}
+            />
+
+            <StatPreviewCard
+              title="Yellow Cards"
+              data={view.topYellow.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="yellow"
+              isTotalView={true}
+              onClick={() => openStatModal('Yellow Cards Leaderboard', 'Player', 'Cards', view.topYellow)}
+            />
+
+            <StatPreviewCard
+              title="Red Cards"
+              data={view.topRed.map(r => ({ id: r.player?.id ?? '', title: r.player?.name ?? '', subtitle: r.player?.team?.name ?? '', value: r.value }))}
+              themeColor="rose"
+              isTotalView={true}
+              onClick={() => openStatModal('Red Cards Leaderboard', 'Player', 'Cards', view.topRed)}
+            />
+
           </div>
 
-          <div className="bg-[#1e293b] rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-blue-900/50 p-4 border-b border-white/10">
-              <h3 className="font-bold text-lg">Top Assists</h3>
-            </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-black/20 text-gray-400">
-                <tr>
-                  <th className="p-3">#</th>
-                  <th className="p-3">Player</th>
-                  <th className="p-3 text-right">Assists</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {view.topAssists.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-white/5">
-                    <td className="p-3">{idx + 1}</td>
-                    <td className="p-3">
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
-                    </td>
-                    <td className="p-3 text-right font-bold text-blue-400">{row.value}</td>
-                  </tr>
-                ))}
-                {view.topAssists.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-gray-500">No data available</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <StatModal
+            isOpen={modalOpen}
+            onClose={() => setModalOpen(false)}
+            title={modalConfig.title}
+            headers={modalConfig.headers}
+            data={modalConfig.data}
+          />
+
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-[#1e293b] rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-yellow-900/50 p-4 border-b border-white/10">
-              <h3 className="font-bold text-lg">Most Yellow Cards</h3>
-            </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-black/20 text-gray-400">
-                <tr>
-                  <th className="p-3">#</th>
-                  <th className="p-3">Player</th>
-                  <th className="p-3 text-right">Cards</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {view.topYellow.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-white/5">
-                    <td className="p-3">{idx + 1}</td>
-                    <td className="p-3">
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
-                    </td>
-                    <td className="p-3 text-right font-bold text-yellow-400">{row.value}</td>
-                  </tr>
-                ))}
-                {view.topYellow.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-gray-500">No data</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="bg-[#1e293b] rounded-lg border border-white/10 overflow-hidden">
-            <div className="bg-red-900/50 p-4 border-b border-white/10">
-              <h3 className="font-bold text-lg">Most Red Cards</h3>
-            </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-black/20 text-gray-400">
-                <tr>
-                  <th className="p-3">#</th>
-                  <th className="p-3">Player</th>
-                  <th className="p-3 text-right">Cards</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {view.topRed.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-white/5">
-                    <td className="p-3">{idx + 1}</td>
-                    <td className="p-3">
-                      <div className="font-semibold">{row.player?.name}</div>
-                      <div className="text-xs text-gray-500">{row.player?.team?.name}</div>
-                    </td>
-                    <td className="p-3 text-right font-bold text-red-400">{row.value}</td>
-                  </tr>
-                ))}
-                {view.topRed.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-gray-500">No data</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Groups */}
-      <div id="section-groups">
-        <h2 className="text-2xl font-bold mb-6">Group Standings</h2>
-        {view.groupNames.length === 0 ? (
-          <div className="p-10 text-center bg-[#1e293b] rounded-lg border border-white/5 text-gray-400">
-            No groups have been set up yet.
-          </div>
-        ) : (
-          view.groupNames.map((groupName) => (
-            <div key={groupName} className="space-y-4">
-              <h3 className="text-xl font-semibold text-indigo-400">
-                {groupName.replace(/_/g, ' ')}
-              </h3>
-              <StandingsTable rows={view.standings[groupName] ?? []} />
+      {activeTab === 'groups' && (
+        <div className="animate-in fade-in">
+          <h2 className="text-2xl font-bold mb-6">Group Standings</h2>
+          {view.groupNames.length === 0 ? (
+            <div className="p-10 text-center bg-[#1e293b] rounded-lg border border-white/5 text-gray-400">
+              No groups have been set up yet.
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            view.groupNames.map((groupName) => (
+              <div key={groupName} className="space-y-4">
+                <h3 className="text-xl font-semibold text-indigo-400">
+                  {groupName.replace(/_/g, ' ')}
+                </h3>
+                <StandingsTable rows={view.standings[groupName] ?? []} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Playoffs */}
-      <div id="section-playoffs">
-        <PlayoffTabs
-          quarterFinal={view.playoffMatches.filter((f) => f.stage === 'quarter_final')}
-          semiFinal={view.playoffMatches.filter((f) => f.stage === 'semi_final')}
-          final={view.playoffMatches.filter((f) => f.stage === 'final')}
-        />
-      </div>
+      {activeTab === 'playoffs' && (
+        <div className="animate-in fade-in">
+          <PlayoffTabs
+            quarterFinal={view.playoffMatches.filter((f) => f.stage === 'quarter_final')}
+            semiFinal={view.playoffMatches.filter((f) => f.stage === 'semi_final')}
+            final={view.playoffMatches.filter((f) => f.stage === 'final')}
+          />
+        </div>
+      )}
     </div>
   )
 }
