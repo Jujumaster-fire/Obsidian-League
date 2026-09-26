@@ -83,6 +83,8 @@ export default function AdminDashboard() {
   const sportOptions = useSportOptions(catalogueSports ?? undefined)
   const [status, setStatus] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [bracketSize, setBracketSize] = useState("4")
+  const [bracketBusy, setBracketBusy] = useState(false)
 
   const [teamForm, setTeamForm] = useState({ ...EMPTY_TEAM_FORM })
   const [fixtureForm, setFixtureForm] = useState({ ...EMPTY_FIXTURE_FORM })
@@ -142,7 +144,80 @@ export default function AdminDashboard() {
     }
   }, [supabase])
 
-const loadTournamentData = useCallback(
+
+  const generateBracket = async () => {
+    if (!selectedTournamentId) return
+    setBracketBusy(true)
+
+    try {
+      const size = parseInt(bracketSize, 10)
+      if (![4, 8, 16].includes(size)) throw new Error('Invalid bracket size')
+
+      const matchDate = new Date().toISOString()
+
+      // Generate Final
+      const { data: finalData, error: finalError } = await supabase
+        .from('fixtures')
+        .insert({
+          tournament_id: selectedTournamentId,
+          stage: 'final',
+          status: 'scheduled',
+          match_date: matchDate,
+        })
+        .select()
+        .single()
+
+      if (finalError) throw finalError
+
+      // Generate Semi-Finals
+      const nextRoundIds = [finalData.id, finalData.id]
+      const nextRoundSlots = ['home', 'away']
+
+      const insertRound = async (numMatches: number, stageName: string, parentIds: string[], parentSlots: string[]) => {
+        const currentRoundIds: string[] = []
+        const currentRoundSlots: string[] = []
+
+        for (let i = 0; i < numMatches; i++) {
+          const { data, error } = await supabase
+            .from('fixtures')
+            .insert({
+              tournament_id: selectedTournamentId,
+              stage: stageName,
+              status: 'scheduled',
+              match_date: matchDate,
+              next_fixture_id: parentIds[i],
+              next_fixture_slot: parentSlots[i]
+            })
+            .select()
+            .single()
+
+          if (error) throw error
+          currentRoundIds.push(data.id, data.id)
+          currentRoundSlots.push('home', 'away')
+        }
+        return { currentRoundIds, currentRoundSlots }
+      }
+
+      const { currentRoundIds: semiIds, currentRoundSlots: semiSlots } = await insertRound(2, 'semi_final', nextRoundIds, nextRoundSlots)
+
+      if (size >= 8) {
+        const { currentRoundIds: qfIds, currentRoundSlots: qfSlots } = await insertRound(4, 'quarter_final', semiIds, semiSlots)
+
+        if (size >= 16) {
+          await insertRound(8, 'round_of_16', qfIds, qfSlots)
+        }
+      }
+
+      setStatus({ kind: 'success', message: 'Bracket generated successfully!' })
+      await loadTournamentData(selectedTournamentId)
+    } catch (error) {
+      setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Failed to generate bracket' })
+    } finally {
+      setBracketBusy(false)
+    }
+  }
+
+  const loadTournamentData = useCallback(
     async (tournamentId: string) => {
       if (!tournamentId) {
         setTeams([])
@@ -206,13 +281,15 @@ const loadTournamentData = useCallback(
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loading effect: fetch then set state once
+    // oxlint-disable-next-line react/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTournaments()
   }, [authLoading, canAccessAdmin, loadTournaments])
 
   useEffect(() => {
     if (authLoading || !canAccessAdmin) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loading effect: fetch then set state once
+    // oxlint-disable-next-line react/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTournamentData(selectedTournamentId)
   }, [authLoading, canAccessAdmin, selectedTournamentId, loadTournamentData])
 
@@ -757,6 +834,37 @@ const handleCreateFixture = async (event: React.FormEvent) => {
                     {busy ? 'Saving…' : 'Schedule fixture'}
                   </button>
                 </form>
+              </section>
+            </div>
+
+            {/* Bracket Generator */}
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mt-8">
+              <section data-tour="admin-bracket-gen" className="rounded-xl border border-white/5 bg-[#1e293b] p-6">
+                <h2 className="mb-4 text-lg font-semibold">Generate Knockout Bracket</h2>
+                <p className="text-sm text-gray-400 mb-4">
+                  Automatically create empty fixture slots pre-linked together for a complete play-offs bracket path.
+                </p>
+                <div className="space-y-4">
+                  <Field label="Bracket Size (Teams)">
+                    <SelectInput
+                      value={bracketSize}
+                      options={[
+                        { value: '4', label: '4 Teams (Semi-finals & Final)' },
+                        { value: '8', label: '8 Teams (Quarter-finals to Final)' },
+                        { value: '16', label: '16 Teams (Round of 16 to Final)' },
+                      ]}
+                      onValueChange={(val) => setBracketSize(val)}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={generateBracket}
+                    disabled={bracketBusy || fixtures.some(f => f.stage === 'final')}
+                    className={adminPrimaryButton}
+                  >
+                    {bracketBusy ? 'Generating...' : fixtures.some(f => f.stage === 'final') ? 'Bracket already exists' : 'Generate Bracket Tree'}
+                  </button>
+                </div>
               </section>
             </div>
 

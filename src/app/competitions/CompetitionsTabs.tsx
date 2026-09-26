@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Suspense } from 'react'
 import { BrandedLoader } from '@/components/Skeleton'
 import {
@@ -33,28 +33,40 @@ interface CompetitionsTabsProps {
 export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, events: allEvents, players: allPlayers }: CompetitionsTabsProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const pathname = usePathname()
+
   const raw = searchParams.get('tab') ?? DEFAULT_TAB
-  const initialTab: Tab = VALID_TABS.includes(raw as Tab) ? (raw as Tab) : DEFAULT_TAB
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab)
+  const activeTab: Tab = VALID_TABS.includes(raw as Tab) ? (raw as Tab) : DEFAULT_TAB
 
   const currentSport = searchParams.get('sport') || 'Football'
   const currentGender = searchParams.get('gender') || 'Female'
 
   // Filter the data down based on global filters
   const { filteredFixtures, filteredTeams, filteredEvents, filteredPlayers } = useMemo(() => {
-    const teams = allTeams.filter(
+    // 1. Find all teams that match the filter exactly.
+    const primaryTeams = allTeams.filter(
       (t) =>
-        (t.team_type ?? 'Football') === currentSport &&
-        (t.category ?? 'Female') === currentGender
+        (t.team_type ?? 'Football').toLowerCase() === currentSport.toLowerCase() &&
+        (t.category ?? 'Female').toLowerCase() === currentGender.toLowerCase()
     )
+    const primaryTeamIds = new Set(primaryTeams.map((t) => t.id))
 
-    const teamIds = new Set(teams.map((t) => t.id))
-
+    // 2. Find fixtures where AT LEAST ONE team matches the filter.
     const fixtures = allFixtures.filter(
-      (f) => teamIds.has(f.home_team_id) || teamIds.has(f.away_team_id)
+      (f) => primaryTeamIds.has(f.home_team_id) || primaryTeamIds.has(f.away_team_id)
     )
 
-    const players = allPlayers.filter((p) => p.team_id && teamIds.has(p.team_id))
+    // 3. To prevent missing teams in the UI, include all teams that participate in these fixtures.
+    const participatingTeamIds = new Set<string>()
+    fixtures.forEach(f => {
+      participatingTeamIds.add(f.home_team_id)
+      participatingTeamIds.add(f.away_team_id)
+    })
+
+    const teams = allTeams.filter(t => participatingTeamIds.has(t.id))
+
+    // 4. Filter players and events normally based on the participating teams.
+    const players = allPlayers.filter((p) => p.team_id && participatingTeamIds.has(p.team_id))
     const playerIds = new Set(players.map((p) => p.id))
 
     const events = allEvents.filter(
@@ -81,19 +93,14 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
   // Results STRICTLY full time
   const results = view.results.filter((f) => f.status === 'full_time')
 
-  const navigateTo = (tab: Tab) => {
-    const url = new URL(window.location.href)
-    if (tab === DEFAULT_TAB) {
-      url.searchParams.delete('tab')
-    } else {
-      url.searchParams.set('tab', tab)
-    }
-    router.replace(url.pathname + url.search, { scroll: false })
-    setActiveTab(tab)
-  }
-
   const handleTabClick = (tab: Tab) => {
-    navigateTo(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === DEFAULT_TAB) {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   // --- STATS STATE ---
@@ -440,9 +447,7 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
       {activeTab === 'playoffs' && (
         <div className="animate-in fade-in">
           <PlayoffTabs
-            quarterFinal={view.playoffMatches.filter((f) => f.stage === 'quarter_final')}
-            semiFinal={view.playoffMatches.filter((f) => f.stage === 'semi_final')}
-            final={view.playoffMatches.filter((f) => f.stage === 'final')}
+            playoffMatches={view.playoffMatches}
           />
         </div>
       )}

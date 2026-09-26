@@ -31,6 +31,8 @@ export interface Fixture {
   away_goalkeeper_id: string | null
   home_team_id: string
   away_team_id: string
+  next_fixture_id?: string | null
+  next_fixture_slot?: string | null
   home_team: { name: string | null; short_name: string | null } | null
   away_team: { name: string | null; short_name: string | null } | null
   stats?: Record<string, Record<string, number | undefined>> | null
