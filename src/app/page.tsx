@@ -225,6 +225,7 @@ export default async function Home() {
              </>
           ) : (
              <>
+                <ConcludedMatchesSection matches={concludedMatches} />
                 <UpcomingFixturesSection matches={upcomingFixtures} />
                 <div data-tour="home-insights">
                   <HomeInsights posts={postsData} />
@@ -232,7 +233,6 @@ export default async function Home() {
                 <div data-tour="home-registration">
                   <RegistrationBanner tournament={activeTournament} />
                 </div>
-                <ConcludedMatchesSection matches={concludedMatches} />
              </>
           )}
 
