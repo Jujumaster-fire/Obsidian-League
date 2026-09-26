@@ -11,12 +11,12 @@ import {
   type Event,
   type Player,
 } from '@/lib/competitions-standings'
-import { FixtureCard } from '@/components/competitions/FixtureCard'
 import { StandingsTable } from '@/components/competitions/Standings'
 import { PlayoffTabs } from '@/components/competitions/PlayoffTabs'
 import { RealtimeClient } from './RealtimeClient'
 import { StatPreviewCard } from '@/components/competitions/StatPreviewCard'
 import { StatModal, type StatModalRow } from '@/components/competitions/StatModal'
+import { MatchCard, type MatchCardRow } from '@/components/MatchCard'
 
 const VALID_TABS = ['overview', 'results', 'fixtures', 'stats', 'groups', 'playoffs'] as const
 type Tab = (typeof VALID_TABS)[number]
@@ -43,7 +43,6 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
 
   // Filter the data down based on global filters
   const { filteredFixtures, filteredTeams, filteredEvents, filteredPlayers } = useMemo(() => {
-    // 1. Find all teams that match the filter exactly.
     const primaryTeams = allTeams.filter(
       (t) =>
         (t.team_type ?? 'Football').toLowerCase() === currentSport.toLowerCase() &&
@@ -51,12 +50,10 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
     )
     const primaryTeamIds = new Set(primaryTeams.map((t) => t.id))
 
-    // 2. Find fixtures where AT LEAST ONE team matches the filter.
     const fixtures = allFixtures.filter(
       (f) => primaryTeamIds.has(f.home_team_id) || primaryTeamIds.has(f.away_team_id)
     )
 
-    // 3. To prevent missing teams in the UI, include all teams that participate in these fixtures.
     const participatingTeamIds = new Set<string>()
     fixtures.forEach(f => {
       participatingTeamIds.add(f.home_team_id)
@@ -65,7 +62,6 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
 
     const teams = allTeams.filter(t => participatingTeamIds.has(t.id))
 
-    // 4. Filter players and events normally based on the participating teams.
     const players = allPlayers.filter((p) => p.team_id && participatingTeamIds.has(p.team_id))
     const playerIds = new Set(players.map((p) => p.id))
 
@@ -90,8 +86,22 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
     (f) => f.status === 'scheduled' || f.status === 'delayed' || f.status === 'suspended'
   )
 
-  // Results STRICTLY full time
-  const results = view.results.filter((f) => f.status === 'full_time')
+  // Results: full_time OR cancelled (parity with Home page)
+  const results = filteredFixtures
+    .filter((f) => f.status === 'full_time' || f.status === 'cancelled')
+    .sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+
+  const mapToMatchCard = (m: Fixture): MatchCardRow => ({
+    id: m.id,
+    home: { name: m.home_team?.name || 'Unknown', abbr: m.home_team?.short_name || 'UNK', score: m.home_score ?? undefined },
+    away: { name: m.away_team?.name || 'Unknown', abbr: m.away_team?.short_name || 'UNK', score: m.away_score ?? undefined },
+    status: isOngoing(m.status) ? 'LIVE' : (m.status === 'full_time' ? 'FT' : (m.status === 'cancelled' ? 'CANCELLED' : 'UPCOMING')),
+    time: m.current_minute ? m.current_minute + "'" : new Date(m.match_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    date: new Date(m.match_date).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  })
+
+  const upcomingCards = upcoming.map(mapToMatchCard)
+  const resultCards = results.map(mapToMatchCard)
 
   const handleTabClick = (tab: Tab) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -173,17 +183,17 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
               <h3 className="text-lg font-bold mb-4 text-emerald-400">Upcoming Fixtures</h3>
-              {upcoming.length === 0 ? (
+              {upcomingCards.length === 0 ? (
                 <p className="text-gray-400 text-sm">No upcoming fixtures scheduled.</p>
               ) : (
                 <div className="space-y-4">
-                  {upcoming.slice(0, 5).map((f) => (
-                    <FixtureCard key={f.id} match={f} />
+                  {upcomingCards.slice(0, 5).map((m) => (
+                    <MatchCard key={m.id} match={m} />
                   ))}
-                  {upcoming.length > 5 && (
+                  {upcomingCards.length > 5 && (
                     <div className="text-center">
                       <span className="text-emerald-400 text-sm">
-                        +{upcoming.length - 5} more on{' '}
+                        +{upcomingCards.length - 5} more on{' '}
                         <button
                           onClick={() => handleTabClick('fixtures')}
                           className="underline hover:text-emerald-300"
@@ -199,17 +209,17 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
 
             <div className="bg-[#1e293b] p-5 rounded-lg border border-white/5">
               <h3 className="text-lg font-bold mb-4 text-indigo-400">Latest Results</h3>
-              {results.length === 0 ? (
+              {resultCards.length === 0 ? (
                 <p className="text-gray-400 text-sm">No matches have been played yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {results.slice(0, 5).map((f) => (
-                    <FixtureCard key={f.id} match={f} />
+                  {resultCards.slice(0, 5).map((m) => (
+                    <MatchCard key={m.id} match={m} />
                   ))}
-                  {results.length > 5 && (
+                  {resultCards.length > 5 && (
                     <div className="text-center">
                       <span className="text-indigo-400 text-sm">
-                        +{results.length - 5} more results on{' '}
+                        +{resultCards.length - 5} more results on{' '}
                         <button
                           onClick={() => handleTabClick('results')}
                           className="underline hover:text-indigo-300"
@@ -277,14 +287,14 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
       {activeTab === 'results' && (
         <div className="animate-in fade-in">
           <h2 className="text-2xl font-bold mb-6">Match Results</h2>
-          {results.length === 0 ? (
+          {resultCards.length === 0 ? (
             <div className="p-10 text-center bg-[#1e293b] rounded-lg border border-white/5">
               No matches have ended yet.
             </div>
           ) : (
-            <div className="grid gap-4">
-              {results.map((f) => (
-                <FixtureCard key={f.id} match={f} />
+            <div className="space-y-4">
+              {resultCards.map((m) => (
+                <MatchCard key={m.id} match={m} />
               ))}
             </div>
           )}
@@ -295,14 +305,14 @@ export function CompetitionsTabs({ fixtures: allFixtures, teams: allTeams, event
       {activeTab === 'fixtures' && (
         <div className="animate-in fade-in">
           <h2 className="text-2xl font-bold mb-6">Upcoming Matches</h2>
-          {upcoming.length === 0 ? (
+          {upcomingCards.length === 0 ? (
             <div className="p-20 text-center bg-[#1e293b] rounded-lg border border-white/5">
               No upcoming matches scheduled.
             </div>
           ) : (
-            <div className="grid gap-4">
-              {upcoming.map((f) => (
-                <FixtureCard key={f.id} match={f} />
+            <div className="space-y-4">
+              {upcomingCards.map((m) => (
+                <MatchCard key={m.id} match={m} />
               ))}
             </div>
           )}

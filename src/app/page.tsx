@@ -1,3 +1,4 @@
+import { MatchCard, type MatchCardRow, type TeamCardInfo } from '@/components/MatchCard'
 import { HomeRealtimeMatches } from "@/components/HomeRealtimeMatches"
 import Link from 'next/link'
 import Navigation from '@/components/Navigation'
@@ -24,19 +25,8 @@ interface FixtureRow {
 }
 
 // Render DTOs for the three live home fixture sections.
-interface TeamCardInfo {
-  name: string;
-  abbr: string;
-  score?: number;
-}
-interface MatchCardRow {
-  id: string;
-  home: TeamCardInfo;
-  away: TeamCardInfo;
-  status: string;
-  time?: string;
-  date?: string;
-}
+
+
 
 const renderMatchList = (matches: MatchCardRow[], emptyMessage: string) => {
   if (matches.length === 0) {
